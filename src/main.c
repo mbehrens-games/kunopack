@@ -5,10 +5,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "cart.h"
-
-#include "gif.h"
-#include "vdp.h"
+#include "art.h"
+#include "rom.h"
 
 /******************************************************************************/
 /* main()                                                                     */
@@ -17,11 +15,12 @@ int main(int argc, char *argv[])
 {
   int m; /* for testing */
 
-  vdp_reset();
+  rom_clear();
 
-  /* read test gif file */
-  gif_read_sprite("dq3_witch.gif");
+  /* load test gif file */
+  art_load_gif("dq3_witch.gif");
 
+#if 0
   /* test that the palette was read correctly */
   for (m = 0; m < VDP_COLORS_PER_PAL; m++)
   {
@@ -53,16 +52,19 @@ int main(int argc, char *argv[])
     printf("%d %d ", (G_vdp_cells[m + 3] >> 4) & 0x0F, G_vdp_cells[m + 3] & 0x0F);
     printf("\n");
   }
+#endif
 
+#if 0
   /* set up test sprite def */
   G_vdp_sprite_defs[0].cell_index = 0;
   G_vdp_sprite_defs[0].dim_frames_anim =  0x0002;
   G_vdp_sprite_defs[0].dim_frames_anim |= (0x0001 << 2) & 0x000C;
 
   G_vdp_sprite_def_count += 1;
+#endif
 
-  /* write out cart file */
-  cart_save("test.kn1");
+  /* write out rom file */
+  rom_save("test.kn1");
 
   return 0;
 }
