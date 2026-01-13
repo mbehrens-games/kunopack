@@ -211,9 +211,10 @@ int rom_validate()
 }
 
 /******************************************************************************/
-/* rom_allocate_file()                                                        */
+/* rom_add_file()                                                             */
 /******************************************************************************/
-int rom_allocate_file(int folder, unsigned long num_bytes)
+int rom_add_file( int folder, char* name, 
+                  unsigned char* data, unsigned long num_bytes)
 {
   int k;
 
@@ -228,6 +229,14 @@ int rom_allocate_file(int folder, unsigned long num_bytes)
 
   /* check input variables */
   if ((folder < 0) || (folder >= ROM_NUM_FOLDERS))
+    return 1;
+
+#if 0
+  if (name == NULL)
+    return 1;
+#endif
+
+  if (data == NULL)
     return 1;
 
   if (num_bytes == 0)
@@ -294,36 +303,7 @@ int rom_allocate_file(int folder, unsigned long num_bytes)
     ROM_WRITE_24BE(ROM_FOLDER_ADDR_LOC(k), tmp_addr + 18 + num_bytes)
   }
 
-  return 0;
-}
-
-/******************************************************************************/
-/* rom_add_sprite()                                                           */
-/******************************************************************************/
-int rom_add_sprite(unsigned char* data, unsigned long num_bytes)
-{
-  unsigned long folder_addr;
-  unsigned long file_addr;
-
-  unsigned short num_files;
-
-  /* check input variables */
-  if (data == NULL)
-    return 1;
-
-  if (num_bytes == 0)
-    return 1;
-
-  /* allocate space for this sprite */
-  if (rom_allocate_file(ROM_FOLDER_SPRITES, num_bytes))
-    return 1;
-
-  /* get address */
-  ROM_READ_24BE(folder_addr, ROM_FOLDER_ADDR_LOC(ROM_FOLDER_SPRITES))
-  ROM_READ_16BE(num_files, folder_addr + 0)
-  ROM_READ_24BE(file_addr, folder_addr + ROM_FILE_ADDR_LOC(num_files - 1))
-
-  /* write sprite data */
+  /* write file data */
   memcpy(&G_rom_data[folder_addr + file_addr], data, num_bytes);
 
   return 0;

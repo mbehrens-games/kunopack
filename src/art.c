@@ -846,18 +846,18 @@ int art_compose_rom_data()
   G_art_rom_data_buf[0] = (((S_art_image_w / 8) - 1) << 4) & 0xF0;
   G_art_rom_data_buf[0] |= ((S_art_image_h / 8) - 1) & 0x0F;
 
-  G_art_rom_data_buf[1] = (S_art_num_frames - 1) & 0x0F;
+  G_art_rom_data_buf[1] = ((S_art_num_frames - 1) << 4) & 0xF0;
 
-  G_art_rom_data_buf[2] = (S_art_delay_time >> 8) & 0x0F;
-  G_art_rom_data_buf[3] = S_art_delay_time & 0x0F;
+  G_art_rom_data_buf[2] = (S_art_delay_time >> 8) & 0xFF;
+  G_art_rom_data_buf[3] = S_art_delay_time & 0xFF;
 
   G_art_rom_data_size += 4;
 
   /* add palette */
   for (k = 0; k < ART_COLORS_PER_PAL; k++)
   {
-    G_art_rom_data_buf[G_art_rom_data_size + 0] = (S_art_palette[k] >> 8) & 0x0F;
-    G_art_rom_data_buf[G_art_rom_data_size + 1] = S_art_palette[k] & 0x0F;
+    G_art_rom_data_buf[G_art_rom_data_size + 0] = (S_art_palette[k] >> 8) & 0xFF;
+    G_art_rom_data_buf[G_art_rom_data_size + 1] = S_art_palette[k] & 0xFF;
 
     G_art_rom_data_size += 2;
   }
@@ -966,7 +966,10 @@ int art_load_gif(char* filename)
   art_convert_pixels_to_cells();
   art_compose_rom_data();
 
-  rom_add_sprite(&G_art_rom_data_buf[0], G_art_rom_data_size);
+  rom_add_file( ROM_FOLDER_SPRITES, 
+                NULL, 
+                &G_art_rom_data_buf[0], 
+                G_art_rom_data_size);
 
   goto ok;
 

@@ -21,7 +21,8 @@ enum
 int rom_clear();
 int rom_validate();
 
-int rom_add_sprite(unsigned char* data, unsigned long num_bytes);
+int rom_add_file( int folder, char* name, 
+                  unsigned char* data, unsigned long num_bytes);
 
 int rom_save(char* filename);
 
