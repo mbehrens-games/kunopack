@@ -10,7 +10,7 @@
 
 #include "rom.h"
 
-/* graphics constants (same as in vdp.h in the main code) */
+/* graphics constants (same as in vdp.c in the main code) */
 #define ART_COLORS_PER_PAL  16
 
 #define ART_CELL_W_H        8
@@ -856,14 +856,15 @@ int art_compose_rom_data()
   /* add palette */
   for (k = 0; k < ART_COLORS_PER_PAL; k++)
   {
-    G_art_rom_data_buf[G_art_rom_data_size + 0] = (S_art_palette[k] >> 8) & 0xFF;
-    G_art_rom_data_buf[G_art_rom_data_size + 1] = S_art_palette[k] & 0xFF;
+    G_art_rom_data_buf[4 + (2 * k + 0)] = (S_art_palette[k] >> 8) & 0xFF;
+    G_art_rom_data_buf[4 + (2 * k + 1)] = S_art_palette[k] & 0xFF;
 
     G_art_rom_data_size += 2;
   }
 
   /* add cells */
-  memcpy(&G_art_rom_data_buf[G_art_rom_data_size], &S_art_cells_buf[0], S_art_cells_size);
+  memcpy( &G_art_rom_data_buf[G_art_rom_data_size], 
+          &S_art_cells_buf[0], S_art_cells_size);
 
   G_art_rom_data_size += S_art_cells_size;
 
