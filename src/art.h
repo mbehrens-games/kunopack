@@ -5,13 +5,15 @@
 #ifndef ART_H
 #define ART_H
 
-/* header: 4 bytes                  */
-/* palette: 16 colors, 2 bytes each */
-/* cells: 256 cells, 32 bytes each  */
-#define ART_ROM_DATA_MAX_BYTES (4 + (2 * 16) + (256 * 32))
+/* rom data buffers */
+extern unsigned char  G_art_pals_buf[];
+extern unsigned short G_art_pals_size;
 
-extern unsigned char  G_art_rom_data_buf[ART_ROM_DATA_MAX_BYTES];
-extern unsigned short G_art_rom_data_size;
+extern unsigned char  G_art_cells_buf[];
+extern unsigned short G_art_cells_size;
+
+extern unsigned char  G_art_sprites_buf[];
+extern unsigned short G_art_sprites_size;
 
 /* function declarations */
 int art_init();
