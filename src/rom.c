@@ -288,10 +288,6 @@ int rom_add_file( int folder, unsigned short* file_number_cb,
   ROM_WRITE_24BE(folder_addr + entry_addr + ROM_ENTRY_ADDR_OFFSET, file_addr)
   ROM_WRITE_24BE(folder_addr + entry_addr + ROM_ENTRY_SIZE_OFFSET, num_bytes)
 
-  /* update file count */
-  num_files += 1;
-  ROM_WRITE_16BE(folder_addr, num_files)
-
   /* update folder size in top level table */
   ROM_READ_24BE(tmp_size, ROM_FILE_SIZE_LOC(folder))
   tmp_size += ROM_TABLE_ENTRY_BYTES + num_bytes;
@@ -310,6 +306,10 @@ int rom_add_file( int folder, unsigned short* file_number_cb,
 
   /* update file number callback */
   *file_number_cb = num_files;
+
+  /* update file count */
+  num_files += 1;
+  ROM_WRITE_16BE(folder_addr, num_files)
 
   return 0;
 }

@@ -23,18 +23,18 @@
 #define ART_PIXELS_MAX_BYTES  (ART_CELLS_PER_IMAGE * ART_PIXELS_PER_CELL)
 
 /* rom data buffers */
-#define ART_PALS_BUF_MAX_BYTES    (2 * ART_COLORS_PER_PAL)
-#define ART_CELLS_BUF_MAX_BYTES   (ART_PIXELS_MAX_BYTES / 2)
-#define ART_SPRITES_BUF_MAX_BYTES (8 + 8)
+#define ART_PAL_BUF_MAX_BYTES    (2 * ART_COLORS_PER_PAL)
+#define ART_CELL_BUF_MAX_BYTES   (ART_PIXELS_MAX_BYTES / 2)
+#define ART_SPRITE_BUF_MAX_BYTES (8 + 8)
 
-unsigned char  G_art_pals_buf[ART_PALS_BUF_MAX_BYTES];
-unsigned short G_art_pals_size;
+unsigned char  G_art_pal_buf[ART_PAL_BUF_MAX_BYTES];
+unsigned short G_art_pal_size;
 
-unsigned char  G_art_cells_buf[ART_CELLS_BUF_MAX_BYTES];
-unsigned short G_art_cells_size;
+unsigned char  G_art_cell_buf[ART_CELL_BUF_MAX_BYTES];
+unsigned short G_art_cell_size;
 
-unsigned char  G_art_sprites_buf[ART_SPRITES_BUF_MAX_BYTES];
-unsigned short G_art_sprites_size;
+unsigned char  G_art_sprite_buf[ART_SPRITE_BUF_MAX_BYTES];
+unsigned short G_art_sprite_size;
 
 /* file pointer, image info */
 static FILE* S_art_fp;
@@ -92,20 +92,20 @@ int art_init()
   int k;
 
   /* rom data buffers */
-  for (k = 0; k < ART_PALS_BUF_MAX_BYTES; k++)
-    G_art_pals_buf[k] = 0;
+  for (k = 0; k < ART_PAL_BUF_MAX_BYTES; k++)
+    G_art_pal_buf[k] = 0;
 
-  G_art_pals_size = 0;
+  G_art_pal_size = 0;
 
-  for (k = 0; k < ART_CELLS_BUF_MAX_BYTES; k++)
-    G_art_cells_buf[k] = 0;
+  for (k = 0; k < ART_CELL_BUF_MAX_BYTES; k++)
+    G_art_cell_buf[k] = 0;
 
-  G_art_cells_size = 0;
+  G_art_cell_size = 0;
 
-  for (k = 0; k < ART_SPRITES_BUF_MAX_BYTES; k++)
-    G_art_sprites_buf[k] = 0;
+  for (k = 0; k < ART_SPRITE_BUF_MAX_BYTES; k++)
+    G_art_sprite_buf[k] = 0;
 
-  G_art_sprites_size = 0;
+  G_art_sprite_size = 0;
 
   /* file pointer, image info */
   S_art_fp = NULL;
@@ -271,11 +271,11 @@ int art_gif_color_table()
   {
     for (k = 0; k < ART_COLORS_PER_PAL; k++)
     {
-      G_art_pals_buf[2 * k + 0] = (pal_colors[k] >> 8) & 0xFF;
-      G_art_pals_buf[2 * k + 1] = pal_colors[k] & 0xFF;
+      G_art_pal_buf[2 * k + 0] = (pal_colors[k] >> 8) & 0xFF;
+      G_art_pal_buf[2 * k + 1] = pal_colors[k] & 0xFF;
     }
 
-    G_art_pals_size = ART_PALS_BUF_MAX_BYTES;
+    G_art_pal_size = ART_PAL_BUF_MAX_BYTES;
   }
 
   S_art_gif_flags |= ART_GIF_FLAG_PAL_FOUND;
@@ -836,19 +836,19 @@ int art_copy_pixels_to_cells()
         /* write this pixel value to the cells buffer */
         if (n % 2 == 0)
         {
-          G_art_cells_buf[cell_addr + cell_offset] &= 0x0F;
-          G_art_cells_buf[cell_addr + cell_offset] |= (val << 4) & 0xF0;
+          G_art_cell_buf[cell_addr + cell_offset] &= 0x0F;
+          G_art_cell_buf[cell_addr + cell_offset] |= (val << 4) & 0xF0;
         }
         else
         {
-          G_art_cells_buf[cell_addr + cell_offset] &= 0xF0;
-          G_art_cells_buf[cell_addr + cell_offset] |= val & 0x0F;
+          G_art_cell_buf[cell_addr + cell_offset] &= 0xF0;
+          G_art_cell_buf[cell_addr + cell_offset] |= val & 0x0F;
         }
       }
     }
   }
 
-  G_art_cells_size = S_art_num_frames * num_cells * ART_BYTES_PER_CELL;
+  G_art_cell_size = S_art_num_frames * num_cells * ART_BYTES_PER_CELL;
 
   return 0;
 }
@@ -858,54 +858,54 @@ int art_copy_pixels_to_cells()
 /******************************************************************************/
 int art_add_sprite_to_rom()
 {
-  unsigned short pals_number;
-  unsigned short cells_number;
-  unsigned short sprites_number;
+  unsigned short pal_number;
+  unsigned short cell_number;
+  unsigned short sprite_number;
 
   /* add palette to rom, save the palette number */
-  rom_add_file( ROM_FOLDER_PALS, &pals_number, 
-                &G_art_pals_buf[0], G_art_pals_size);
+  rom_add_file( ROM_FOLDER_PALS, &pal_number, 
+                &G_art_pal_buf[0], G_art_pal_size);
 
   /* add cells to rom, save the cells number */
-  rom_add_file( ROM_FOLDER_CELLS, &cells_number, 
-                &G_art_cells_buf[0], G_art_cells_size);
+  rom_add_file( ROM_FOLDER_CELLS, &cell_number, 
+                &G_art_cell_buf[0], G_art_cell_size);
 
   /* compose sprite data */
 
   /* name */
-  G_art_sprites_buf[0] = '\0';
-  G_art_sprites_buf[1] = '\0';
-  G_art_sprites_buf[2] = '\0';
-  G_art_sprites_buf[3] = '\0';
-  G_art_sprites_buf[4] = '\0';
-  G_art_sprites_buf[5] = '\0';
-  G_art_sprites_buf[6] = '\0';
-  G_art_sprites_buf[7] = '\0';
+  G_art_sprite_buf[0] = '\0';
+  G_art_sprite_buf[1] = '\0';
+  G_art_sprite_buf[2] = '\0';
+  G_art_sprite_buf[3] = '\0';
+  G_art_sprite_buf[4] = '\0';
+  G_art_sprite_buf[5] = '\0';
+  G_art_sprite_buf[6] = '\0';
+  G_art_sprite_buf[7] = '\0';
 
   /* sprite type flag, animation speed */
-  G_art_sprites_buf[8] = 0;
+  G_art_sprite_buf[8] = 0;
 
   /* dimensions, number of sprites */
-  G_art_sprites_buf[9] = (((S_art_image_w / 8) - 1) << 6) & 0xC0;
-  G_art_sprites_buf[9] |= (((S_art_image_h / 8) - 1) << 4) & 0x30;
-  G_art_sprites_buf[9] |= (S_art_num_frames - 1) & 0x0F;
+  G_art_sprite_buf[9] = (((S_art_image_w / 8) - 1) << 6) & 0xC0;
+  G_art_sprite_buf[9] |= (((S_art_image_h / 8) - 1) << 4) & 0x30;
+  G_art_sprite_buf[9] |= (S_art_num_frames - 1) & 0x0F;
 
   /* animation bit array */
-  G_art_sprites_buf[10] = 0;
-  G_art_sprites_buf[11] = 0;
+  G_art_sprite_buf[10] = 0;
+  G_art_sprite_buf[11] = 0;
 
-  /* palette and cells numbers */
-  G_art_sprites_buf[12] = (pals_number >> 8) & 0xFF;
-  G_art_sprites_buf[13] = pals_number & 0xFF;
+  /* palette and cell numbers */
+  G_art_sprite_buf[12] = (pal_number >> 8) & 0xFF;
+  G_art_sprite_buf[13] = pal_number & 0xFF;
 
-  G_art_sprites_buf[14] = (cells_number >> 8) & 0xFF;
-  G_art_sprites_buf[15] = cells_number & 0xFF;
+  G_art_sprite_buf[14] = (cell_number >> 8) & 0xFF;
+  G_art_sprite_buf[15] = cell_number & 0xFF;
 
-  G_art_sprites_size = ART_SPRITES_BUF_MAX_BYTES;
+  G_art_sprite_size = ART_SPRITE_BUF_MAX_BYTES;
 
   /* add sprite to rom */
-  rom_add_file( ROM_FOLDER_SPRITES, &sprites_number, 
-                &G_art_sprites_buf[0], G_art_sprites_size);
+  rom_add_file( ROM_FOLDER_SPRITES, &sprite_number, 
+                &G_art_sprite_buf[0], G_art_sprite_size);
 
   return 0;
 }
