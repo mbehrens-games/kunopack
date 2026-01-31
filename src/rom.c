@@ -9,8 +9,8 @@
 #include "rom.h"
 
 /* file table format:                                     */
-/* number of entries (16 bit value) -> 2 bytes            */
-/* each entry (24 bit address & size) -> 6 bytes          */
+/* number of entries (16 bit value): 2 bytes              */
+/* each entry (24 bit address & size): 6 bytes            */
 /* addresses are relative (from start of the file table)  */
 #define ROM_TABLE_COUNT_BYTES 2
 #define ROM_TABLE_ENTRY_BYTES 6
@@ -55,7 +55,7 @@ unsigned long G_rom_size;
 /******************************************************************************/
 int rom_insert_block(unsigned long addr, unsigned long num_bytes)
 {
-  unsigned int k;
+  unsigned long k;
 
   /* make sure address is valid */
   /* note: the new block is appended if address = rom size */
@@ -85,7 +85,7 @@ int rom_insert_block(unsigned long addr, unsigned long num_bytes)
 /******************************************************************************/
 int rom_clear()
 {
-  int k;
+  unsigned long k;
 
   unsigned long tmp_addr;
 
@@ -132,8 +132,8 @@ int rom_clear()
 /******************************************************************************/
 int rom_validate()
 {
-  int k;
-  int m;
+  unsigned long k;
+  unsigned long m;
 
   unsigned short num_folders;
   unsigned short num_files;
@@ -197,10 +197,10 @@ int rom_validate()
 /******************************************************************************/
 /* rom_add_file()                                                             */
 /******************************************************************************/
-int rom_add_file( int folder, unsigned short* file_number_cb, 
+int rom_add_file( unsigned short folder, 
                   unsigned char* data, unsigned long num_bytes)
 {
-  int k;
+  unsigned long k;
 
   unsigned long folder_addr;
   unsigned long entry_addr;
@@ -212,10 +212,7 @@ int rom_add_file( int folder, unsigned short* file_number_cb,
   unsigned short num_files;
 
   /* check input variables */
-  if ((folder < 0) || (folder >= ROM_NUM_FOLDERS))
-    return 1;
-
-  if (file_number_cb == NULL)
+  if (folder >= ROM_NUM_FOLDERS)
     return 1;
 
   if (data == NULL)
@@ -229,22 +226,6 @@ int rom_add_file( int folder, unsigned short* file_number_cb,
 
   /* read number of files */
   ROM_READ_16BE(num_files, folder_addr)
-
-  /* check if this file already exists in this folder */
-  for (k = 0; k < num_files; k++)
-  {
-    ROM_READ_24BE(tmp_addr, folder_addr + ROM_FILE_ADDR_LOC(k))
-    ROM_READ_24BE(tmp_size, folder_addr + ROM_FILE_SIZE_LOC(k))
-
-    if (tmp_size != num_bytes)
-      continue;
-
-    if (memcmp(&G_rom_data[folder_addr + tmp_addr], &data[0], num_bytes) == 0)
-    {
-      *file_number_cb = k;
-      return 0;
-    }
-  }
 
   /* determine (relative) addresses for new entry and file */
   if (num_files == 0)
@@ -303,9 +284,6 @@ int rom_add_file( int folder, unsigned short* file_number_cb,
 
   /* write file data */
   memcpy(&G_rom_data[folder_addr + file_addr], data, num_bytes);
-
-  /* update file number callback */
-  *file_number_cb = num_files;
 
   /* update file count */
   num_files += 1;

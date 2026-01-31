@@ -12,9 +12,7 @@ extern unsigned long G_rom_size;
 
 enum
 {
-  ROM_FOLDER_PALS = 0, 
-  ROM_FOLDER_CELLS, 
-  ROM_FOLDER_SPRITES, 
+  ROM_FOLDER_SPRITES = 0, 
   ROM_FOLDER_TILES, 
   ROM_NUM_FOLDERS
 };
@@ -23,7 +21,7 @@ enum
 int rom_clear();
 int rom_validate();
 
-int rom_add_file( int folder, unsigned short* file_number_cb, 
+int rom_add_file( unsigned short folder, 
                   unsigned char* data, unsigned long num_bytes);
 
 int rom_save(char* filename);
