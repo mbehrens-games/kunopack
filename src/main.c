@@ -13,7 +13,7 @@
 /******************************************************************************/
 int main(int argc, char *argv[])
 {
-  rom_clear();
+  rom_format();
 
   /* load test gif file */
   art_load_gif("dq3_witch.gif");

@@ -5,9 +5,13 @@
 #ifndef ART_H
 #define ART_H
 
-/* rom file buffer */
-extern unsigned char  G_art_rom_file_buf[];
-extern unsigned short G_art_rom_file_size;
+/* rom data buffers */
+extern unsigned short G_art_palette[];
+extern unsigned short G_art_elements[];
+extern unsigned char  G_art_cells[];
+
+extern unsigned short G_art_num_elements;
+extern unsigned short G_art_num_cells;
 
 /* function declarations */
 int art_init();
