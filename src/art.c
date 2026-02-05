@@ -874,40 +874,6 @@ int art_add_sprite()
 
   G_art_num_elements += 1;
 
-  /* add the cells to the buffer */
-  art_add_cells();
-
-  return 0;
-}
-
-/******************************************************************************/
-/* art_assemble_sprite_file()                                                 */
-/******************************************************************************/
-int art_assemble_sprite_file()
-{
-  unsigned short file_number;
-
-  /* create the file */
-  rom_create_file(ROM_FOLDER_SPRITES, &file_number);
-
-  /* palette */
-  rom_add_words_to_file(ROM_FOLDER_SPRITES, file_number, 
-                        &G_art_palette[0], VDP_COLORS_PER_PAL);
-
-  /* name table */
-  rom_add_words_to_file(ROM_FOLDER_SPRITES, file_number, 
-                        &G_art_num_elements, 1);
-
-  rom_add_words_to_file(ROM_FOLDER_SPRITES, file_number, 
-                        &G_art_elements[0], G_art_num_elements * VDP_NAME_ENTRY_SIZE);
-
-  /* cells */
-  rom_add_words_to_file(ROM_FOLDER_SPRITES, file_number, 
-                        &G_art_num_cells, 1);
-
-  rom_add_bytes_to_file(ROM_FOLDER_SPRITES, file_number, 
-                        &G_art_cells[0], G_art_num_cells * VDP_BYTES_PER_CELL);
-
   return 0;
 }
 
@@ -1005,9 +971,7 @@ int art_load_gif(char* filename)
 
   /* add sprite and cells (all frames should now be present) */
   art_add_sprite();
-
-  /* create the file in the rom */
-  art_assemble_sprite_file();
+  art_add_cells();
 
   goto ok;
 
@@ -1016,6 +980,40 @@ nope:
   return 1;
 
 ok:
+  return 0;
+}
+
+/******************************************************************************/
+/* art_add_file_to_rom()                                                      */
+/******************************************************************************/
+int art_add_file_to_rom()
+{
+  rom_create_file(ROM_FOLDER_SPRITES);
+
+  /* palette */
+  if (rom_add_words_to_file(&G_art_palette[0], VDP_COLORS_PER_PAL))
+    return 1;
+
+  /* uncompressed size, compressed size, then the nametable */
+  if (rom_add_words_to_file(&G_art_num_elements, 1))
+    return 1;
+
+  if (rom_add_words_to_file(&G_art_num_elements, 1))
+    return 1;
+
+  if (rom_add_words_to_file(&G_art_elements[0], G_art_num_elements * VDP_NAME_ENTRY_SIZE))
+    return 1;
+
+  /* uncompressed size, compressed size, then the cells */
+  if (rom_add_words_to_file(&G_art_num_cells, 1))
+    return 1;
+
+  if (rom_add_words_to_file(&G_art_num_cells, 1))
+    return 1;
+
+  if (rom_add_bytes_to_file(&G_art_cells[0], G_art_num_cells * VDP_BYTES_PER_CELL))
+    return 1;
+
   return 0;
 }
 

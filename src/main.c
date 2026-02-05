@@ -15,10 +15,9 @@ int main(int argc, char *argv[])
 {
   rom_format();
 
-  /* load test gif file */
   art_load_gif("dq3_witch.gif");
+  art_add_file_to_rom();
 
-  /* write out rom file */
   rom_save("test.kn1");
 
   return 0;

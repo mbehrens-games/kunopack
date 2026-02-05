@@ -20,13 +20,11 @@ int rom_clear();
 int rom_validate();
 int rom_format();
 
-int rom_create_file(unsigned short folder, unsigned short* file_number_cb);
+int rom_create_file(unsigned short folder_index);
 
-int rom_add_bytes_to_file(unsigned short folder, unsigned short file_number, 
-                          unsigned char* data, unsigned long num_bytes);
+int rom_add_bytes_to_file(unsigned char* data, unsigned long num_bytes);
 
-int rom_add_words_to_file(unsigned short folder, unsigned short file_number, 
-                          unsigned short* data, unsigned long num_words);
+int rom_add_words_to_file(unsigned short* data, unsigned long num_words);
 
 int rom_save(char* filename);
 

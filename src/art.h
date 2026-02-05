@@ -18,5 +18,7 @@ int art_init();
 
 int art_load_gif(char* filename);
 
+int art_add_file_to_rom();
+
 #endif
 
