@@ -218,7 +218,7 @@ int rom_create_file(unsigned short folder_index)
   entry_addr = ROM_FILE_TABLE_SIZE(file_index);
 
   /* move data after the new entry, if any, to create space */
-  if (entry_addr < G_rom_size)
+  if ((folder_addr + entry_addr) < G_rom_size)
   {
     memmove(&G_rom_data[folder_addr + entry_addr + ROM_TABLE_ENTRY_BYTES], 
             &G_rom_data[folder_addr + entry_addr], 
