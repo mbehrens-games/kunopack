@@ -51,9 +51,11 @@ static unsigned char S_art_palette_found;
 static unsigned short S_art_image_w;
 static unsigned short S_art_image_h;
 
-static unsigned short S_art_image_frames;
-static unsigned short S_art_image_ticks;
-static unsigned short S_art_image_anim_type;
+static unsigned short S_art_frame_rows;
+static unsigned short S_art_frame_columns;
+static unsigned short S_art_num_frames;
+static unsigned short S_art_anim_ticks;
+static unsigned short S_art_anim_type;
 
 /* file variables */
 enum
@@ -119,10 +121,11 @@ int art_clear_image_vars()
   S_art_image_w = 8;
   S_art_image_h = 8;
 
-  S_art_image_frames = 1;
-  S_art_image_ticks = 0;
-
-  S_art_image_anim_type = VDP_ANIM_TYPE_ONCE;
+  S_art_frame_rows = 1;
+  S_art_frame_columns = 1;
+  S_art_num_frames = 1;
+  S_art_anim_ticks = 0;
+  S_art_anim_type = VDP_ANIM_TYPE_ONCE;
 
   /* file variables */
   S_art_fp = NULL;
@@ -150,8 +153,6 @@ int art_add_cells()
   unsigned long m;
   unsigned long n;
 
-  unsigned short frame_rows;
-  unsigned short frame_columns;
   unsigned short frame_cells;
 
   unsigned short cell_addr;
@@ -163,15 +164,13 @@ int art_add_cells()
   unsigned char val;
 
   /* determine how many cells are to be created */
-  frame_rows = S_art_image_h / VDP_CELL_W_H;
-  frame_columns = (S_art_image_w / S_art_image_frames) / VDP_CELL_W_H;
-  frame_cells = frame_rows * frame_columns;
+  frame_cells = S_art_frame_rows * S_art_frame_columns;
 
-  if (G_art_num_cells + (S_art_image_frames * frame_cells) > VDP_MAX_CELLS)
+  if (G_art_num_cells + (S_art_num_frames * frame_cells) > VDP_MAX_CELLS)
     return 1;
 
   /* create cells */
-  for (k = 0; k < S_art_image_frames; k++)
+  for (k = 0; k < S_art_num_frames; k++)
   {
     for (m = 0; m < frame_cells; m++)
     {
@@ -179,9 +178,9 @@ int art_add_cells()
       cell_addr = VDP_BYTES_PER_CELL * G_art_num_cells;
       cell_addr += VDP_BYTES_PER_CELL * ((k * frame_cells) + m);
 
-      pixel_addr = k * (frame_columns * VDP_CELL_W_H);
-      pixel_addr += VDP_CELL_W_H * S_art_image_w * (m / frame_columns);
-      pixel_addr += VDP_CELL_W_H * (m % frame_columns);
+      pixel_addr = k * (S_art_frame_columns * VDP_CELL_W_H);
+      pixel_addr += VDP_CELL_W_H * S_art_image_w * (m / S_art_frame_columns);
+      pixel_addr += VDP_CELL_W_H * (m % S_art_frame_columns);
 
       for (n = 0; n < VDP_PIXELS_PER_CELL; n++)
       {
@@ -209,7 +208,7 @@ int art_add_cells()
     }
   }
 
-  G_art_num_cells += S_art_image_frames * frame_cells;
+  G_art_num_cells += S_art_num_frames * frame_cells;
 
   return 0;
 }
@@ -221,20 +220,13 @@ int art_add_sprite()
 {
   unsigned short val;
 
-  unsigned short frame_rows;
-  unsigned short frame_columns;
-
   if ((G_art_num_elements + 1) >= VDP_NAME_TABLE_SIZE)
     return 1;
 
-  /* determine number of rows and columns (in cells) */
-  frame_rows = S_art_image_h / VDP_CELL_W_H;
-  frame_columns = (S_art_image_w / S_art_image_frames) / VDP_CELL_W_H;
-
   /* 1st word: dimensions, number of frames, animation frame length */
-  val = ((frame_columns - 1) << 12) & 0xF000;
-  val |= ((frame_rows - 1) << 8) & 0x0F00;
-  val |= ((S_art_image_frames - 1) << 5) & 0x00E0;
+  val = ((S_art_frame_columns - 1) << 12) & 0xF000;
+  val |= ((S_art_frame_rows - 1) << 8) & 0x0F00;
+  val |= ((S_art_num_frames - 1) << 5) & 0x00E0;
 
   G_art_elements[2 * G_art_num_elements + 0] = val;
 
@@ -251,12 +243,16 @@ int art_add_sprite()
 /******************************************************************************/
 /* art_read_pbm_header()                                                      */
 /******************************************************************************/
-int art_read_pbm_header()
+int art_read_pbm_header(unsigned long subchunk_size)
 {
   unsigned char buf[4];
 
   /* make sure file is open */
   if (S_art_fp == NULL)
+    return 1;
+
+  /* check subchunk size */
+  if (subchunk_size != 20)
     return 1;
 
   /* image width and height */
@@ -303,7 +299,7 @@ int art_read_pbm_header()
   else
     S_art_file_compression = 1;
 
-  /* pad byte */
+  /* padding byte */
   if (fread(&buf[0], sizeof(unsigned char), 1, S_art_fp) < 1)
     return 1;
 
@@ -331,12 +327,16 @@ int art_read_pbm_header()
 /******************************************************************************/
 /* art_read_pbm_color_map()                                                   */
 /******************************************************************************/
-int art_read_pbm_color_map()
+int art_read_pbm_color_map(unsigned long subchunk_size)
 {
   unsigned short k;
 
   unsigned char  buf[4];
   unsigned short val;
+
+  /* check subchunk size */
+  if (subchunk_size != (S_art_file_colors * 3))
+    return 1;
 
   /* read the colors */
   for (k = 0; k < S_art_file_colors; k++)
@@ -362,7 +362,7 @@ int art_read_pbm_color_map()
 /******************************************************************************/
 /* art_read_pbm_body()                                                        */
 /******************************************************************************/
-int art_read_pbm_body()
+int art_read_pbm_body(unsigned long subchunk_size)
 {
   unsigned short k;
 
@@ -424,6 +424,13 @@ int art_read_pbm_body()
     }
   }
 
+  /* optional padding byte */
+  if ((subchunk_size % 2) != 0)
+  {
+    if (fread(&tmp_ch, sizeof(unsigned char), 1, S_art_fp) < 1)
+      return 1;
+  }
+
   return 0;
 }
 
@@ -470,13 +477,9 @@ int art_load_pbm(char* filename, unsigned short num_frames)
   if (!ART_BUFFER_IS_CHUNK_NAME(buf, 'P', 'B', 'M', ' '))
     goto nope;
 
-  printf("Processing subchunks...\n");
-
   /* start processing subchunks */
   while (fread(&buf[0], sizeof(unsigned char), 4, S_art_fp) == 4)
   {
-    printf("Top of loop\n");
-
     /* subchunk name */
     /* (we already read it from the file in the loop condition) */
     if (ART_BUFFER_IS_CHUNK_NAME(buf, 'B', 'M', 'H', 'D'))
@@ -497,22 +500,20 @@ int art_load_pbm(char* filename, unsigned short num_frames)
     subchunk_size |= (buf[2] <<  8) & 0x0000FF00;
     subchunk_size |= buf[3] & 0x000000FF;
 
-    printf("Subchunk %d, Size: %ld\n", S_art_chunk_name, subchunk_size);
-
     /* process subchunk, or skip it! */
     if (S_art_chunk_name == ART_PBM_CHUNK_NAME_BMHD)
     {
-      if (art_read_pbm_header())
+      if (art_read_pbm_header(subchunk_size))
         return 1;
     }
     else if (S_art_chunk_name == ART_PBM_CHUNK_NAME_CMAP)
     {
-      if (art_read_pbm_color_map())
+      if (art_read_pbm_color_map(subchunk_size))
         return 1;
     }
     else if (S_art_chunk_name == ART_PBM_CHUNK_NAME_BODY)
     {
-      if (art_read_pbm_body())
+      if (art_read_pbm_body(subchunk_size))
         return 1;
     }
     else
@@ -522,13 +523,33 @@ int art_load_pbm(char* filename, unsigned short num_frames)
   /* close the file */
   fclose(S_art_fp);
 
-  printf("File parsed successfully!\n");
+  /* validate image variables */
+  S_art_num_frames = num_frames;
+  S_art_anim_ticks = 0;
+  S_art_anim_type = VDP_ANIM_TYPE_ONCE;
 
-  S_art_image_frames = num_frames;
+  if ((S_art_image_w % 8) != 0)
+    return 1;
 
-  printf("W: %d, H: %d, Num Frames: %d\n", S_art_image_w, S_art_image_h, S_art_image_frames);
+  if ((S_art_image_h % 8) != 0)
+    return 1;
 
-  /* add sprite and cells (all frames should now be present) */
+  if ((S_art_num_frames == 0) || (S_art_num_frames > 8))
+    return 1;
+
+  if ((S_art_image_w % S_art_num_frames) != 0)
+    return 1;
+
+  S_art_frame_rows = S_art_image_h / VDP_CELL_W_H;
+  S_art_frame_columns = S_art_image_w / (S_art_num_frames * VDP_CELL_W_H);
+
+  if ((S_art_frame_rows == 0) || (S_art_frame_rows > 16))
+    return 1;
+
+  if ((S_art_frame_columns == 0) || (S_art_frame_columns > 16))
+    return 1;
+
+  /* add sprite and cells */
   art_add_sprite();
   art_add_cells();
 
