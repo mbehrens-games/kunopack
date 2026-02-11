@@ -15,7 +15,10 @@ int main(int argc, char *argv[])
 {
   rom_format();
 
-  art_load_gif("dq3_witch.gif");
+  art_clear_file_vars();
+  art_clear_image_vars();
+
+  art_load_pbm("chun_li_standing_anim.iff", 3);
   art_add_file_to_rom();
 
   rom_save("test.kn1");
