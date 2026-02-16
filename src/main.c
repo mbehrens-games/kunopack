@@ -19,7 +19,7 @@ int main(int argc, char *argv[])
   art_clear_image_vars();
 
   art_load_pbm("chun_li_standing_anim.iff", 3);
-  art_add_file_to_rom();
+  art_add_files_to_rom();
 
   rom_save("test.kn1");
 

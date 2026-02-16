@@ -31,10 +31,10 @@
 
 enum
 {
-  VDP_ANIM_TYPE_ONCE = 0, 
-  VDP_ANIM_TYPE_LOOP, 
-  VDP_ANIM_TYPE_BOUNCE, 
-  VDP_ANIM_TYPE_RAGGED 
+  VDP_SPRITE_ANIM_TYPE_ONCE = 0, 
+  VDP_SPRITE_ANIM_TYPE_LOOP, 
+  VDP_SPRITE_ANIM_TYPE_BOUNCE, 
+  VDP_SPRITE_ANIM_TYPE_RAGGED 
 };
 
 /* rom data buffers */
@@ -79,8 +79,11 @@ static unsigned char  S_art_file_compression;
     (buf[2] == ch_3) &&                                                        \
     (buf[3] == ch_4))
 
-/* image buffer */
+/* image buffers */
 #define ART_IMAGE_BUFFER_SIZE (2 * VDP_VRAM_SIZE)
+
+static unsigned char  S_art_compressed_buf[ART_IMAGE_BUFFER_SIZE];
+static unsigned long  S_art_compressed_size;
 
 static unsigned char  S_art_pixels_buf[ART_IMAGE_BUFFER_SIZE];
 static unsigned long  S_art_pixels_size;
@@ -125,7 +128,7 @@ int art_clear_image_vars()
   S_art_frame_columns = 1;
   S_art_num_frames = 1;
   S_art_anim_ticks = 0;
-  S_art_anim_type = VDP_ANIM_TYPE_ONCE;
+  S_art_anim_type = VDP_SPRITE_ANIM_TYPE_ONCE;
 
   /* file variables */
   S_art_fp = NULL;
@@ -135,7 +138,12 @@ int art_clear_image_vars()
   S_art_file_colors = 0;
   S_art_file_compression = 0;
 
-  /* image buffer */
+  /* image buffers */
+  for (k = 0; k < ART_IMAGE_BUFFER_SIZE; k++)
+    S_art_compressed_buf[k] = 0;
+
+  S_art_compressed_size = 0;
+
   for (k = 0; k < ART_IMAGE_BUFFER_SIZE; k++)
     S_art_pixels_buf[k] = 0;
 
@@ -247,12 +255,12 @@ int art_read_pbm_header(unsigned long subchunk_size)
 {
   unsigned char buf[4];
 
-  /* make sure file is open */
-  if (S_art_fp == NULL)
-    return 1;
-
   /* check subchunk size */
   if (subchunk_size != 20)
+    return 1;
+
+  /* make sure file is open */
+  if (S_art_fp == NULL)
     return 1;
 
   /* image width and height */
@@ -364,30 +372,52 @@ int art_read_pbm_color_map(unsigned long subchunk_size)
 /******************************************************************************/
 int art_read_pbm_body(unsigned long subchunk_size)
 {
-  unsigned short k;
+  unsigned long  k;
 
   unsigned long  num_pixels;
+  unsigned long  comp_index;
   unsigned char  tmp_ch;
   unsigned short run_length;
 
-  /* determine number of pixels */
-  num_pixels = S_art_image_w * S_art_image_h;
+  /* read subchunk data */
+  if (subchunk_size > ART_IMAGE_BUFFER_SIZE)
+    return 1;
 
-  /* read the pixels */
+  if (fread(&S_art_compressed_buf[0], sizeof(unsigned char), 
+            subchunk_size, S_art_fp) < subchunk_size)
+  {
+    return 1;
+  }
+
+  S_art_compressed_size = subchunk_size;
+
+  /* optional padding byte */
+  if ((subchunk_size % 2) != 0)
+  {
+    if (fread(&tmp_ch, sizeof(unsigned char), 1, S_art_fp) < 1)
+      return 1;
+  }
+
+  /* copy or decompress the pixels */
   if (S_art_file_compression == 0)
   {
-    if (fread(&S_art_pixels_buf[0], sizeof(unsigned char), num_pixels, S_art_fp) < num_pixels)
-      return 1;
+    for (k = 0; k < S_art_compressed_size; k++)
+      S_art_pixels_buf[k] = S_art_compressed_buf[k];
 
-    S_art_pixels_size = num_pixels;
+    S_art_pixels_size = S_art_compressed_size;
   }
   else
   {
     S_art_pixels_size = 0;
 
+    num_pixels = S_art_image_w * S_art_image_h;
+    comp_index = 0;
+
     while (S_art_pixels_size < num_pixels)
     {
-      if (fread(&tmp_ch, sizeof(unsigned char), 1, S_art_fp) < 1)
+      tmp_ch = S_art_compressed_buf[comp_index++];
+
+      if (comp_index > subchunk_size)
         return 1;
 
       /* repeated run */
@@ -395,7 +425,9 @@ int art_read_pbm_body(unsigned long subchunk_size)
       {
         run_length = 257 - tmp_ch;
 
-        if (fread(&tmp_ch, sizeof(unsigned char), 1, S_art_fp) < 1)
+        tmp_ch = S_art_compressed_buf[comp_index++];
+
+        if (comp_index > subchunk_size)
           return 1;
 
         for (k = 0; k < run_length; k++)
@@ -410,7 +442,9 @@ int art_read_pbm_body(unsigned long subchunk_size)
 
         for (k = 0; k < run_length; k++)
         {
-          if (fread(&tmp_ch, sizeof(unsigned char), 1, S_art_fp) < 1)
+          tmp_ch = S_art_compressed_buf[comp_index++];
+
+          if (comp_index > subchunk_size)
             return 1;
 
           S_art_pixels_buf[S_art_pixels_size + k] = tmp_ch;
@@ -422,13 +456,6 @@ int art_read_pbm_body(unsigned long subchunk_size)
       else
         break;
     }
-  }
-
-  /* optional padding byte */
-  if ((subchunk_size % 2) != 0)
-  {
-    if (fread(&tmp_ch, sizeof(unsigned char), 1, S_art_fp) < 1)
-      return 1;
   }
 
   return 0;
@@ -526,7 +553,7 @@ int art_load_pbm(char* filename, unsigned short num_frames)
   /* validate image variables */
   S_art_num_frames = num_frames;
   S_art_anim_ticks = 0;
-  S_art_anim_type = VDP_ANIM_TYPE_ONCE;
+  S_art_anim_type = VDP_SPRITE_ANIM_TYPE_ONCE;
 
   if ((S_art_image_w % 8) != 0)
     return 1;
@@ -564,34 +591,20 @@ ok:
 }
 
 /******************************************************************************/
-/* art_add_file_to_rom()                                                      */
+/* art_add_files_to_rom()                                                     */
 /******************************************************************************/
-int art_add_file_to_rom()
+int art_add_files_to_rom()
 {
-  rom_create_file(ROM_FOLDER_SPRITES);
-
   /* palette */
-  if (rom_add_words_to_file(&G_art_palette[0], VDP_COLORS_PER_PAL))
+  if (rom_add_file_words(&G_art_palette[0], VDP_COLORS_PER_PAL))
     return 1;
 
-  /* uncompressed size, compressed size, then the nametable */
-  if (rom_add_words_to_file(&G_art_num_elements, 1))
+  /* nametable */
+  if (rom_add_file_words(&G_art_elements[0], G_art_num_elements * VDP_NAME_ENTRY_SIZE))
     return 1;
 
-  if (rom_add_words_to_file(&G_art_num_elements, 1))
-    return 1;
-
-  if (rom_add_words_to_file(&G_art_elements[0], G_art_num_elements * VDP_NAME_ENTRY_SIZE))
-    return 1;
-
-  /* uncompressed size, compressed size, then the cells */
-  if (rom_add_words_to_file(&G_art_num_cells, 1))
-    return 1;
-
-  if (rom_add_words_to_file(&G_art_num_cells, 1))
-    return 1;
-
-  if (rom_add_bytes_to_file(&G_art_cells[0], G_art_num_cells * VDP_BYTES_PER_CELL))
+  /* cells */
+  if (rom_add_file_bytes(&G_art_cells[0], G_art_num_cells * VDP_BYTES_PER_CELL))
     return 1;
 
   return 0;

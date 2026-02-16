@@ -8,28 +8,47 @@
 
 #include "rom.h"
 
-#define ROM_MAX_BYTES (4 * 1024 * 1024) /* 4 MB */
+/* file table format                          */
+/* 1) number of files (2 bytes)               */
+/* 2) the file table entries (12 bytes each)  */
+/*    a) file address (3 bytes)               */
+/*    b) file size (3 bytes)                  */
+/*    c) file name (6 bytes)                  */
 
-/* file table format:                                     */
-/* number of entries (16 bit value): 2 bytes              */
-/* each entry (24 bit address & size): 6 bytes            */
-/* addresses are relative (from start of the file table)  */
-#define ROM_TABLE_COUNT_BYTES 2
-#define ROM_TABLE_ENTRY_BYTES 6
-#define ROM_ENTRY_ADDR_OFFSET 0
-#define ROM_ENTRY_SIZE_OFFSET 3
+#define ROM_MAX_FILES 65535
+
+#define ROM_FILE_TABLE_COUNT_BYTES  2
+
+#define ROM_FILE_ENTRY_ADDR_OFFSET  0
+#define ROM_FILE_ENTRY_ADDR_BYTES   3
+
+#define ROM_FILE_ENTRY_SIZE_OFFSET  3
+#define ROM_FILE_ENTRY_SIZE_BYTES   3
+
+#define ROM_FILE_ENTRY_NAME_OFFSET  6
+#define ROM_FILE_ENTRY_NAME_BYTES   6
+
+#define ROM_FILE_TABLE_ENTRY_BYTES  12
 
 #define ROM_FILE_TABLE_SIZE(num_entries)                                       \
-  (ROM_TABLE_COUNT_BYTES + (ROM_TABLE_ENTRY_BYTES * num_entries))
+  (ROM_FILE_TABLE_COUNT_BYTES + (ROM_FILE_TABLE_ENTRY_BYTES * num_entries))
 
-#define ROM_FILE_ENTRY_LOC(entry)                                              \
-  (ROM_TABLE_COUNT_BYTES + (ROM_TABLE_ENTRY_BYTES * (entry)) + 0)
+#define ROM_FILE_ENTRY_LOC(entry_index)                                        \
+  (ROM_FILE_TABLE_COUNT_BYTES + (ROM_FILE_TABLE_ENTRY_BYTES * (entry_index)))
 
-#define ROM_FILE_ADDR_LOC(entry)                                               \
-  (ROM_TABLE_COUNT_BYTES + (ROM_TABLE_ENTRY_BYTES * (entry)) + ROM_ENTRY_ADDR_OFFSET)
+#define ROM_FILE_ADDR_LOC(entry_index)                                         \
+  (ROM_FILE_ENTRY_LOC(entry_index) + ROM_FILE_ENTRY_ADDR_OFFSET)
 
-#define ROM_FILE_SIZE_LOC(entry)                                               \
-  (ROM_TABLE_COUNT_BYTES + (ROM_TABLE_ENTRY_BYTES * (entry)) + ROM_ENTRY_SIZE_OFFSET)
+#define ROM_FILE_SIZE_LOC(entry_index)                                         \
+  (ROM_FILE_ENTRY_LOC(entry_index) + ROM_FILE_ENTRY_SIZE_OFFSET)
+
+#define ROM_FILE_NAME_LOC(entry_index)                                         \
+  (ROM_FILE_ENTRY_LOC(entry_index) + ROM_FILE_ENTRY_NAME_OFFSET)
+
+/* big endian read / write macros */
+
+#define ROM_WRITE_BYTE(addr, val)                                              \
+  G_rom_data[(addr) + 0] = (val) & 0xFF;
 
 #define ROM_WRITE_16BE(addr, val)                                              \
   G_rom_data[(addr) + 0] = ((val) >> 8) & 0xFF;                                \
@@ -40,6 +59,9 @@
   G_rom_data[(addr) + 1] = ((val) >> 8) & 0xFF;                                \
   G_rom_data[(addr) + 2] = (val) & 0xFF;
 
+#define ROM_READ_BYTE(val, addr)                                               \
+  (val) = G_rom_data[(addr) + 0] & 0xFF;
+
 #define ROM_READ_16BE(val, addr)                                               \
   (val) = (G_rom_data[(addr) + 0] << 8) & 0xFF00;                              \
   (val) |= G_rom_data[(addr) + 1] & 0x00FF;
@@ -49,14 +71,12 @@
   (val) |= (G_rom_data[(addr) + 1] << 8) & 0x00FF00;                           \
   (val) |=  G_rom_data[(addr) + 2] & 0x0000FF;
 
+/* the rom! */
+
+#define ROM_MAX_BYTES (4 * 1024 * 1024) /* 4 MB */
+
 unsigned char G_rom_data[ROM_MAX_BYTES];
 unsigned long G_rom_size;
-
-/* file pointer variables */
-static unsigned short S_rom_folder_index;
-static unsigned short S_rom_file_index;
-static unsigned long  S_rom_fp_addr;
-static unsigned long  S_rom_fp_size;
 
 /******************************************************************************/
 /* rom_clear()                                                                */
@@ -65,17 +85,10 @@ int rom_clear()
 {
   unsigned long k;
 
-  /* zero out the bytes */
   for (k = 0; k < ROM_MAX_BYTES; k++)
     G_rom_data[k] = 0x00;
 
   G_rom_size = 0;
-
-  /* reset file pointer variables */
-  S_rom_folder_index = 0;
-  S_rom_file_index = 0;
-  S_rom_fp_addr = 0;
-  S_rom_fp_size = 0;
 
   return 0;
 }
@@ -85,63 +98,58 @@ int rom_clear()
 /******************************************************************************/
 int rom_validate()
 {
-  unsigned long k;
-  unsigned long m;
+  unsigned short k;
 
-  unsigned short num_folders;
   unsigned short num_files;
 
-  unsigned long folder_addr;
-  unsigned long folder_size;
+  unsigned long  data_block_addr;
+  unsigned long  data_block_size;
 
-  unsigned long file_addr;
-  unsigned long file_size;
+  unsigned long  file_addr;
+  unsigned long  file_size;
+  unsigned long  file_accum;
 
-  unsigned long rom_accum;
-  unsigned long folder_accum;
-
-  /* make sure the file table is accurate */
-  ROM_READ_16BE(num_folders, 0)
-
-  if (num_folders != ROM_NUM_FOLDERS)
+  /* make sure rom size is valid */
+  if (G_rom_size > ROM_MAX_BYTES)
     return 1;
 
-  /* the rom accumulator adds up the folder sizes,  */
-  /* and should end up equaling the size of the rom */
-  rom_accum = ROM_FILE_TABLE_SIZE(ROM_NUM_FOLDERS);
-
-  for (k = 0; k < ROM_NUM_FOLDERS; k++)
+  /* obtain file table size */
+  if (G_rom_size >= ROM_FILE_TABLE_COUNT_BYTES)
   {
-    ROM_READ_24BE(folder_addr, ROM_FILE_ADDR_LOC(k))
-    ROM_READ_24BE(folder_size, ROM_FILE_SIZE_LOC(k))
+    ROM_READ_16BE(num_files, 0)
+  }
+  else
+    return 1;
 
-    if (folder_addr != rom_accum)
-      return 1; 
+  /* obtain data block size */
+  data_block_addr = ROM_FILE_TABLE_SIZE(num_files);
 
-    ROM_READ_16BE(num_files, folder_addr + 0)
+  if (G_rom_size >= data_block_addr)
+    data_block_size = G_rom_size - data_block_addr;
+  else
+    return 1;
 
-    /* the folder accumulator adds up the file sizes,     */
-    /* and should end up equaling the size of the folder  */
-    folder_accum = ROM_FILE_TABLE_SIZE(num_files);
+  /* validate file table */
+  file_accum = 0;
 
-    for (m = 0; m < num_files; m++)
-    {
-      ROM_READ_24BE(file_addr, folder_addr + ROM_FILE_ADDR_LOC(m))
-      ROM_READ_24BE(file_size, folder_addr + ROM_FILE_SIZE_LOC(m))
+  for (k = 0; k < num_files; k++)
+  {
+    ROM_READ_24BE(file_addr, ROM_FILE_ADDR_LOC(k))
+    ROM_READ_24BE(file_size, ROM_FILE_SIZE_LOC(k))
 
-      if (file_addr != folder_accum)
-        return 1;
-
-      folder_accum += file_size;
-    }
-
-    if (folder_accum != folder_size)
+    if (file_accum != file_addr)
       return 1;
 
-    rom_accum += folder_size;
+    if (file_size == 0)
+      return 1;
+
+    if (file_addr >= data_block_size)
+      return 1;
+
+    file_accum += file_size;
   }
 
-  if (rom_accum != G_rom_size)
+  if (file_accum != data_block_size)
     return 1;
 
   return 0;
@@ -152,32 +160,12 @@ int rom_validate()
 /******************************************************************************/
 int rom_format()
 {
-  unsigned long k;
-
-  unsigned long tmp_addr;
-
-  /* reset the rom */
   rom_clear();
 
-  /* add space for skeleton file table */
-  G_rom_size = ROM_FILE_TABLE_SIZE(ROM_NUM_FOLDERS);
-  G_rom_size += ROM_NUM_FOLDERS * ROM_FILE_TABLE_SIZE(0);
-
-  /* set up skeleton file table */
-  ROM_WRITE_16BE(0, ROM_NUM_FOLDERS)
-
-  for (k = 0; k < ROM_NUM_FOLDERS; k++)
-  {
-    tmp_addr = ROM_FILE_TABLE_SIZE(ROM_NUM_FOLDERS);
-    tmp_addr += k * ROM_FILE_TABLE_SIZE(0);
-
-    /* folder address & size */
-    ROM_WRITE_24BE(0 + ROM_FILE_ADDR_LOC(k), tmp_addr)
-    ROM_WRITE_24BE(0 + ROM_FILE_SIZE_LOC(k), ROM_FILE_TABLE_SIZE(0))
-
-    /* initial file count in each folder */
-    ROM_WRITE_16BE(tmp_addr, 0)
-  }
+  /* just define a zero-entry file table          */
+  /* since the rom is already cleared to zeroes,  */
+  /* we just increase the rom size to cover this. */
+  G_rom_size = ROM_FILE_TABLE_COUNT_BYTES;
 
   return 0;
 }
@@ -185,232 +173,130 @@ int rom_format()
 /******************************************************************************/
 /* rom_create_file()                                                          */
 /******************************************************************************/
-int rom_create_file(unsigned short folder_index)
+int rom_create_file(unsigned long num_bytes)
 {
   unsigned short k;
 
-  unsigned long folder_addr;
-  unsigned long folder_size;
-
-  unsigned long entry_addr;
-  unsigned long tmp_addr;
-
+  unsigned short num_files;
   unsigned short file_index;
 
-  unsigned short num_files;
+  unsigned long  data_block_addr;
+  unsigned long  data_block_size;
 
   /* check input variables */
-  if (folder_index >= ROM_NUM_FOLDERS)
-    return 1;
-
-  /* make sure there is space for the new entry */
-  if ((G_rom_size + ROM_TABLE_ENTRY_BYTES) > ROM_MAX_BYTES)
-    return 1;
-
-  /* determine new entry address (end of current file table) */
-  ROM_READ_24BE(folder_addr, 0 + ROM_FILE_ADDR_LOC(folder_index))
-
-  ROM_READ_16BE(num_files, folder_addr)
-  file_index = num_files;
-  num_files += 1;
-  ROM_WRITE_16BE(folder_addr, num_files)
-
-  entry_addr = ROM_FILE_TABLE_SIZE(file_index);
-
-  /* move data after the new entry, if any, to create space */
-  if ((folder_addr + entry_addr) < G_rom_size)
-  {
-    memmove(&G_rom_data[folder_addr + entry_addr + ROM_TABLE_ENTRY_BYTES], 
-            &G_rom_data[folder_addr + entry_addr], 
-            G_rom_size - (folder_addr + entry_addr));
-  }
-
-  /* update rom size */
-  G_rom_size += ROM_TABLE_ENTRY_BYTES;
-
-  /* update addresses of preceding files in the file table */
-  for (k = 0; k < num_files - 1; k++)
-  {
-    ROM_READ_24BE(tmp_addr, folder_addr + ROM_FILE_ADDR_LOC(k))
-    tmp_addr += ROM_TABLE_ENTRY_BYTES;
-    ROM_WRITE_24BE(folder_addr + ROM_FILE_ADDR_LOC(k), tmp_addr)
-  }
-
-  /* update folder size in top level table */
-  ROM_READ_24BE(folder_size, 0 + ROM_FILE_SIZE_LOC(folder_index))
-  folder_size += ROM_TABLE_ENTRY_BYTES;
-  ROM_WRITE_24BE(0 + ROM_FILE_SIZE_LOC(folder_index), folder_size)
-
-  /* update subsequent folder addresses in top level table */
-  for (k = folder_index + 1; k < ROM_NUM_FOLDERS; k++)
-  {
-    ROM_READ_24BE(tmp_addr, 0 + ROM_FILE_ADDR_LOC(k))
-    tmp_addr += ROM_TABLE_ENTRY_BYTES;
-    ROM_WRITE_24BE(0 + ROM_FILE_ADDR_LOC(k), tmp_addr)
-  }
-
-  /* fill in entry */
-  ROM_WRITE_24BE(folder_addr + ROM_FILE_ADDR_LOC(file_index), folder_size)
-  ROM_WRITE_24BE(folder_addr + ROM_FILE_SIZE_LOC(file_index), 0)
-
-  /* update file pointer variables */
-  S_rom_folder_index = folder_index;
-  S_rom_file_index = file_index;
-  S_rom_fp_addr = folder_addr + folder_size;
-  S_rom_fp_size = 0;
-
-  return 0;
-}
-
-/******************************************************************************/
-/* rom_add_block_to_file()                                                    */
-/******************************************************************************/
-int rom_add_block_to_file(unsigned long num_bytes)
-{
-  unsigned long k;
-
-  unsigned long folder_addr;
-  unsigned long folder_size;
-
-  unsigned long file_addr;
-  unsigned long file_size;
-
-  unsigned long block_addr;
-  unsigned long tmp_addr;
-
-  unsigned short num_files;
-
-  /* check input variables and file pointer variables */
-  if (S_rom_fp_addr == 0)
-    return 1;
-
   if (num_bytes == 0)
-    return 0;
-
-  /* make sure there is space for the new block */
-  if ((G_rom_size + num_bytes) > ROM_MAX_BYTES)
     return 1;
 
-  /* get folder address & size */
-  if (S_rom_folder_index >= ROM_NUM_FOLDERS)
+  /* make sure there is space for the new table entry and file */
+  if ((G_rom_size + ROM_FILE_TABLE_ENTRY_BYTES + num_bytes) >= ROM_MAX_BYTES)
     return 1;
 
-  ROM_READ_24BE(folder_addr, 0 + ROM_FILE_ADDR_LOC(S_rom_folder_index))
-  ROM_READ_24BE(folder_size, 0 + ROM_FILE_SIZE_LOC(S_rom_folder_index))
-  ROM_READ_16BE(num_files, folder_addr)
+  /* insert space for new file table entry */
+  ROM_READ_16BE(num_files, 0)
 
-  /* get file address & size */
-  if (S_rom_file_index >= num_files)
+  if (num_files == ROM_MAX_FILES)
     return 1;
 
-  ROM_READ_24BE(file_addr, folder_addr + ROM_FILE_ADDR_LOC(S_rom_file_index))
-  ROM_READ_24BE(file_size, folder_addr + ROM_FILE_SIZE_LOC(S_rom_file_index))
+  data_block_addr = ROM_FILE_TABLE_SIZE(num_files);
+  data_block_size = G_rom_size - data_block_addr;
 
-  /* insert block at end of file */
-  block_addr = file_addr + file_size;
-
-  /* move data after the new block, if any, to create space */
-  if ((folder_addr + block_addr) < G_rom_size)
+  if (data_block_size > 0)
   {
-    memmove(&G_rom_data[folder_addr + block_addr + num_bytes], 
-            &G_rom_data[folder_addr + block_addr], 
-            G_rom_size - (folder_addr + block_addr));
+    memmove(&G_rom_data[data_block_addr + ROM_FILE_TABLE_ENTRY_BYTES], 
+            &G_rom_data[data_block_addr], 
+            data_block_size);
   }
 
-  /* update rom size */
+  G_rom_size += ROM_FILE_TABLE_ENTRY_BYTES;
+
+  file_index = num_files;
+
+  num_files += 1;
+  ROM_WRITE_16BE(0, num_files)
+
+  /* fill out file table entry */
+  ROM_WRITE_24BE(ROM_FILE_ADDR_LOC(file_index), data_block_size)
+  ROM_WRITE_24BE(ROM_FILE_SIZE_LOC(file_index), num_bytes)
+
+  for (k = 0; k < ROM_FILE_ENTRY_NAME_BYTES; k++)
+  {
+    ROM_WRITE_BYTE(ROM_FILE_NAME_LOC(file_index) + k, 0)
+  }
+
+  /* update the rom size and return */
   G_rom_size += num_bytes;
 
-  /* update file size in the file table */
-  file_size += num_bytes;
-  ROM_WRITE_24BE(folder_addr + ROM_FILE_SIZE_LOC(S_rom_file_index), file_size)
-
-  /* update subsequent file addresses in the file table */
-  for (k = S_rom_file_index + 1; k < num_files; k++)
-  {
-    ROM_READ_24BE(tmp_addr, folder_addr + ROM_FILE_ADDR_LOC(k))
-    tmp_addr += num_bytes;
-    ROM_WRITE_24BE(folder_addr + ROM_FILE_ADDR_LOC(k), tmp_addr)
-  }
-
-  /* update folder size in top level table */
-  ROM_READ_24BE(folder_size, 0 + ROM_FILE_SIZE_LOC(S_rom_folder_index))
-  folder_size += num_bytes;
-  ROM_WRITE_24BE(0 + ROM_FILE_SIZE_LOC(S_rom_folder_index), folder_size)
-
-  /* update subsequent folder addresses in top level table */
-  for (k = S_rom_folder_index + 1; k < ROM_NUM_FOLDERS; k++)
-  {
-    ROM_READ_24BE(tmp_addr, 0 + ROM_FILE_ADDR_LOC(k))
-    tmp_addr += num_bytes;
-    ROM_WRITE_24BE(0 + ROM_FILE_ADDR_LOC(k), tmp_addr)
-  }
-
-  /* update file pointer variables */
-  S_rom_fp_size += num_bytes;
-
   return 0;
 }
 
 /******************************************************************************/
-/* rom_add_bytes_to_file()                                                    */
+/* rom_add_file_bytes()                                                       */
 /******************************************************************************/
-int rom_add_bytes_to_file(unsigned char* data, unsigned long num_bytes)
+int rom_add_file_bytes(unsigned char* data, unsigned long num_bytes)
 {
-  unsigned long block_abs_addr;
+  unsigned short num_files;
 
-  /* check input variables and file pointer variables */
-  if (S_rom_fp_addr == 0)
-    return 1;
+  unsigned long  data_block_addr;
+  unsigned long  file_addr;
 
+  /* check input variables */
   if (data == NULL)
     return 1;
 
   if (num_bytes == 0)
     return 0;
 
-  /* determine address of current end of file */
-  block_abs_addr = S_rom_fp_addr + S_rom_fp_size;
-
-  /* create new block */
-  if (rom_add_block_to_file(num_bytes))
+  /* create new file */
+  if (rom_create_file(num_bytes))
     return 1;
 
-  /* copy the data to the block */
-  memcpy(&G_rom_data[block_abs_addr], data, num_bytes);
+  /* determine new file address */
+  ROM_READ_16BE(num_files, 0)
+
+  data_block_addr = ROM_FILE_TABLE_SIZE(num_files);
+
+  ROM_READ_24BE(file_addr, ROM_FILE_ADDR_LOC(num_files - 1))
+
+  /* copy the data to the file */
+  memcpy(&G_rom_data[data_block_addr + file_addr], data, num_bytes);
 
   return 0;
 }
 
 /******************************************************************************/
-/* rom_add_words_to_file()                                                    */
+/* rom_add_file_words()                                                       */
 /******************************************************************************/
-int rom_add_words_to_file(unsigned short* data, unsigned long num_words)
+int rom_add_file_words(unsigned short* data, unsigned long num_words)
 {
-  unsigned long k;
+  unsigned long  k;
 
-  unsigned long block_abs_addr;
+  unsigned short num_files;
 
-  /* check input variables and file pointer variables */
-  if (S_rom_fp_addr == 0)
-    return 1;
+  unsigned long  data_block_addr;
+  unsigned long  file_addr;
 
+  /* check input variables */
   if (data == NULL)
     return 1;
 
   if (num_words == 0)
     return 0;
 
-  /* determine address of current end of file */
-  block_abs_addr = S_rom_fp_addr + S_rom_fp_size;
-
-  /* create new block */
-  if (rom_add_block_to_file(2 * num_words))
+  /* create new file */
+  if (rom_create_file(2 * num_words))
     return 1;
 
-  /* copy the data to the block */
+  /* determine new file address */
+  ROM_READ_16BE(num_files, 0)
+
+  data_block_addr = ROM_FILE_TABLE_SIZE(num_files);
+
+  ROM_READ_24BE(file_addr, ROM_FILE_ADDR_LOC(num_files - 1))
+
+  /* copy the data to the file */
   for (k = 0; k < num_words; k++)
   {
-    ROM_WRITE_16BE(block_abs_addr + 2 * k, data[k])
+    ROM_WRITE_16BE(data_block_addr + file_addr + 2 * k, data[k])
   }
 
   return 0;

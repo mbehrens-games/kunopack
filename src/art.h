@@ -19,7 +19,7 @@ int art_clear_image_vars();
 
 int art_load_pbm(char* filename, unsigned short num_frames);
 
-int art_add_file_to_rom();
+int art_add_files_to_rom();
 
 #endif
 
