@@ -7,6 +7,7 @@
 
 #include "art.h"
 #include "con.h"
+#include "comp.h"
 #include "rom.h"
 
 /******************************************************************************/
@@ -15,6 +16,9 @@
 int main(int argc, char *argv[])
 {
   rom_format();
+
+  /* compile rom folder */
+  comp_pack_rom("test");
 
   /* parse con file */
   con_load_file("test_spriteset.con");

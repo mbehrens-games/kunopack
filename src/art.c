@@ -214,14 +214,14 @@ int art_gif_header()
     return 1;
 
   /* read "GIF" */
-  if (fread(&buf[0], sizeof(unsigned char), 3, S_art_fp) < 3)
+  if (fread(buf, sizeof(unsigned char), 3, S_art_fp) < 3)
     return 1;
 
   if ((buf[0] != 0x47) || (buf[1] != 0x49) || (buf[2] != 0x46))
     return 1;
 
   /* read "89a" */
-  if (fread(&buf[0], sizeof(unsigned char), 3, S_art_fp) < 3)
+  if (fread(buf, sizeof(unsigned char), 3, S_art_fp) < 3)
     return 1;
 
   if ((buf[0] != 0x38) || (buf[1] != 0x39) || (buf[2] != 0x61))
@@ -241,18 +241,18 @@ int art_gif_logical_screen_descriptor()
     return 1;
 
   /* read image width and height */
-  if (fread(&buf[0], sizeof(unsigned char), 2, S_art_fp) < 2)
+  if (fread(buf, sizeof(unsigned char), 2, S_art_fp) < 2)
     return 1;  
 
   S_art_image_w = (256 * buf[1]) + buf[0];
 
-  if (fread(&buf[0], sizeof(unsigned char), 2, S_art_fp) < 2)
+  if (fread(buf, sizeof(unsigned char), 2, S_art_fp) < 2)
     return 1;
 
   S_art_image_h = (256 * buf[1]) + buf[0];
 
   /* read packed fields */
-  if (fread(&buf[0], sizeof(unsigned char), 1, S_art_fp) < 1)
+  if (fread(buf, sizeof(unsigned char), 1, S_art_fp) < 1)
     return 1;
 
   if (buf[0] & 0x80)
@@ -264,7 +264,7 @@ int art_gif_logical_screen_descriptor()
     S_art_gif_color_table_size = 0;
 
   /* read background color and aspect ratio */
-  if (fread(&buf[0], sizeof(unsigned char), 2, S_art_fp) < 2)
+  if (fread(buf, sizeof(unsigned char), 2, S_art_fp) < 2)
     return 1;
 
   /* check that image width and height are valid */
@@ -308,7 +308,7 @@ int art_gif_color_table()
   /* read palette */
   for (k = 0; k < S_art_gif_color_table_size; k++)
   {
-    if (fread(&buf[0], sizeof(unsigned char), 3, S_art_fp) < 3)
+    if (fread(buf, sizeof(unsigned char), 3, S_art_fp) < 3)
       return 1;
 
     if ((!(S_art_gif_flags & ART_GIF_FLAG_PAL_FOUND)) && (k < VDP_COLORS_PER_PAL))
@@ -461,18 +461,18 @@ int art_gif_graphic_control_extension()
     return 1;
 
   /* read block size */
-  if (fread(&buf[0], sizeof(unsigned char), 1, S_art_fp) < 1)
+  if (fread(buf, sizeof(unsigned char), 1, S_art_fp) < 1)
     return 1;
 
   if (buf[0] != 4)
     return 1;
 
   /* read packed fields */
-  if (fread(&buf[0], sizeof(unsigned char), 1, S_art_fp) < 1)
+  if (fread(buf, sizeof(unsigned char), 1, S_art_fp) < 1)
     return 1;
 
   /* read delay time */
-  if (fread(&buf[0], sizeof(unsigned char), 2, S_art_fp) < 2)
+  if (fread(buf, sizeof(unsigned char), 2, S_art_fp) < 2)
     return 1;
 
   if (!(S_art_gif_flags & ART_GIF_FLAG_DELAY_FOUND))
@@ -499,11 +499,11 @@ int art_gif_graphic_control_extension()
   }
 
   /* read transparent color */
-  if (fread(&buf[0], sizeof(unsigned char), 1, S_art_fp) < 1)
+  if (fread(buf, sizeof(unsigned char), 1, S_art_fp) < 1)
     return 1;
 
   /* block terminator */
-  if (fread(&buf[0], sizeof(unsigned char), 1, S_art_fp) < 1)
+  if (fread(buf, sizeof(unsigned char), 1, S_art_fp) < 1)
     return 1;
 
   if (buf[0] != 0)
@@ -523,28 +523,28 @@ int art_gif_image_descriptor()
     return 1;
 
   /* read sub-image corner and dimensions */
-  if (fread(&buf[0], sizeof(unsigned char), 2, S_art_fp) < 2)
+  if (fread(buf, sizeof(unsigned char), 2, S_art_fp) < 2)
     return 1;
 
   S_art_gif_sub_left = (256 * buf[1]) + buf[0];
 
-  if (fread(&buf[0], sizeof(unsigned char), 2, S_art_fp) < 2)
+  if (fread(buf, sizeof(unsigned char), 2, S_art_fp) < 2)
     return 1;
 
   S_art_gif_sub_top = (256 * buf[1]) + buf[0];
 
-  if (fread(&buf[0], sizeof(unsigned char), 2, S_art_fp) < 2)
+  if (fread(buf, sizeof(unsigned char), 2, S_art_fp) < 2)
     return 1;
 
   S_art_gif_sub_w = (256 * buf[1]) + buf[0];
 
-  if (fread(&buf[0], sizeof(unsigned char), 2, S_art_fp) < 2)
+  if (fread(buf, sizeof(unsigned char), 2, S_art_fp) < 2)
     return 1;
 
   S_art_gif_sub_h = (256 * buf[1]) + buf[0];
 
   /* read packed fields */
-  if (fread(&buf[0], sizeof(unsigned char), 1, S_art_fp) < 1)
+  if (fread(buf, sizeof(unsigned char), 1, S_art_fp) < 1)
     return 1;
 
   S_art_gif_flags &= ~ART_GIF_FLAG_LCT_EXISTS;
@@ -1011,7 +1011,8 @@ int art_add_cells()
 /******************************************************************************/
 int art_load_gif(char* filename)
 {
-  unsigned char buf[4];
+  unsigned char block_type;
+  unsigned char ext_label;
 
   /* make sure filename is valid */
   if (filename == NULL)
@@ -1039,42 +1040,42 @@ int art_load_gif(char* filename)
 
   while (1)
   {
-    if (fread(&buf[0], sizeof(unsigned char), 1, S_art_fp) < 1)
+    if (fread(&block_type, sizeof(unsigned char), 1, S_art_fp) < 1)
       goto nope;
 
     /* extension */
-    if (buf[0] == 0x21)
+    if (block_type == 0x21)
     {
-      if (fread(&buf[1], sizeof(unsigned char), 1, S_art_fp) < 1)
+      if (fread(&ext_label, sizeof(unsigned char), 1, S_art_fp) < 1)
         goto nope;
 
       /* app extension */
-      if (buf[1] == 0xFF)
+      if (ext_label == 0xFF)
       {
         if (art_gif_app_extension())
           goto nope;
       }
       /* comment extension */
-      else if (buf[1] == 0xFE)
+      else if (ext_label == 0xFE)
       {
         if (art_gif_comment_extension())
           goto nope;
       }
       /* plain text extension */
-      else if (buf[1] == 0x01)
+      else if (ext_label == 0x01)
       {
         if (art_gif_plain_text_extension())
           goto nope;
       }
       /* graphic control extension */
-      else if (buf[1] == 0xF9)
+      else if (ext_label == 0xF9)
       {
         if (art_gif_graphic_control_extension())
           goto nope;
       }
     }
     /* image descriptor */
-    else if (buf[0] == 0x2C)
+    else if (block_type == 0x2C)
     {
       if (art_gif_image_descriptor())
         goto nope;
@@ -1092,7 +1093,7 @@ int art_load_gif(char* filename)
         goto nope;
     }
     /* trailer */
-    else if (buf[0] == 0x3B)
+    else if (block_type == 0x3B)
       break;
   }
 
@@ -1131,15 +1132,15 @@ ok:
 int art_add_files_to_rom()
 {
   /* palette */
-  if (rom_add_file_words(&G_art_palette[0], VDP_COLORS_PER_PAL))
+  if (rom_add_file_words(G_art_palette, VDP_COLORS_PER_PAL))
     return 1;
 
   /* nametable */
-  if (rom_add_file_words(&G_art_elements[0], G_art_num_elements * VDP_NAME_ENTRY_SIZE))
+  if (rom_add_file_words(G_art_elements, G_art_num_elements * VDP_NAME_ENTRY_SIZE))
     return 1;
 
   /* cells */
-  if (rom_add_file_bytes(&G_art_cells[0], G_art_num_cells * VDP_BYTES_PER_CELL))
+  if (rom_add_file_bytes(G_art_cells, G_art_num_cells * VDP_BYTES_PER_CELL))
     return 1;
 
   return 0;

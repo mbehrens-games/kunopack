@@ -122,9 +122,9 @@ int con_advance_token()
     S_con_string_size += 1;
 
     /* check if this identifier is a defined keyword */
-    if (strcmp(&S_con_string_buf[0], "spriteset") == 0)
+    if (!strcmp(S_con_string_buf, "spriteset"))
       S_con_token = CON_TOKEN_SPRITESET;
-    else if (strcmp(&S_con_string_buf[0], "sprite") == 0)
+    else if (!strcmp(S_con_string_buf, "sprite"))
       S_con_token = CON_TOKEN_SPRITE;
     else
       S_con_token = CON_TOKEN_NAME;
@@ -217,15 +217,15 @@ int con_parse_sprite()
   if (CON_ADVANCE_AND_CHECK_TOKEN(CON_TOKEN_NAME))
     return 1;
 
-  printf("Sprite Name: %s\n", &S_con_string_buf[0]);
+  printf("Sprite Name: %s\n", S_con_string_buf);
 
   /* read filename */
   if (CON_ADVANCE_AND_CHECK_TOKEN(CON_TOKEN_FILENAME))
     return 1;
 
-  printf("Sprite Filename: %s\n", &S_con_string_buf[0]);
+  printf("Sprite Filename: %s\n", S_con_string_buf);
 
-  art_load_gif(&S_con_string_buf[0]);
+  art_load_gif(S_con_string_buf);
 
   return 0;
 }
@@ -239,7 +239,7 @@ int con_parse_spriteset()
   if (CON_ADVANCE_AND_CHECK_TOKEN(CON_TOKEN_NAME))
     return 1;
 
-  printf("Spriteset Name: %s\n", &S_con_string_buf[0]);
+  printf("Spriteset Name: %s\n", S_con_string_buf);
 
   /* read opening curly brace */
   if (CON_ADVANCE_AND_CHECK_TOKEN(CON_TOKEN_OPEN_CURLY_BRACE))

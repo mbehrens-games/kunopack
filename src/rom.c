@@ -348,7 +348,7 @@ int rom_save(char* filename)
     return 1;
 
   /* write rom data */
-  if (fwrite(&G_rom_data[0], sizeof(unsigned char), G_rom_size, fp) < G_rom_size)
+  if (fwrite(G_rom_data, sizeof(unsigned char), G_rom_size, fp) < G_rom_size)
     return 1;
 
   /* close the rom file */
