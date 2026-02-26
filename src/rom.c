@@ -8,42 +8,35 @@
 
 #include "rom.h"
 
-/* file table format                          */
-/* 1) number of files (2 bytes)               */
-/* 2) the file table entries (12 bytes each)  */
-/*    a) file address (3 bytes)               */
-/*    b) file size (3 bytes)                  */
-/*    c) file name (6 bytes)                  */
+/* chunk table format                         */
+/* 1) number of chunks (2 bytes)              */
+/* 2) the chunk table entries (6 bytes each)  */
+/*    a) chunk address (3 bytes)              */
+/*    b) chunk size (3 bytes)                 */
 
-#define ROM_MAX_FILES 65535
+#define ROM_MAX_CHUNKS 65535
 
-#define ROM_FILE_TABLE_COUNT_BYTES  2
+#define ROM_CHUNK_TABLE_COUNT_BYTES  2
 
-#define ROM_FILE_ENTRY_ADDR_OFFSET  0
-#define ROM_FILE_ENTRY_ADDR_BYTES   3
+#define ROM_CHUNK_ENTRY_ADDR_OFFSET  0
+#define ROM_CHUNK_ENTRY_ADDR_BYTES   3
 
-#define ROM_FILE_ENTRY_SIZE_OFFSET  3
-#define ROM_FILE_ENTRY_SIZE_BYTES   3
+#define ROM_CHUNK_ENTRY_SIZE_OFFSET  3
+#define ROM_CHUNK_ENTRY_SIZE_BYTES   3
 
-#define ROM_FILE_ENTRY_NAME_OFFSET  6
-#define ROM_FILE_ENTRY_NAME_BYTES   6
+#define ROM_CHUNK_TABLE_ENTRY_BYTES  6
 
-#define ROM_FILE_TABLE_ENTRY_BYTES  12
+#define ROM_CHUNK_TABLE_SIZE(num_entries)                                      \
+  (ROM_CHUNK_TABLE_COUNT_BYTES + (ROM_CHUNK_TABLE_ENTRY_BYTES * num_entries))
 
-#define ROM_FILE_TABLE_SIZE(num_entries)                                       \
-  (ROM_FILE_TABLE_COUNT_BYTES + (ROM_FILE_TABLE_ENTRY_BYTES * num_entries))
+#define ROM_CHUNK_ENTRY_LOC(entry_index)                                       \
+  (ROM_CHUNK_TABLE_COUNT_BYTES + (ROM_CHUNK_TABLE_ENTRY_BYTES * (entry_index)))
 
-#define ROM_FILE_ENTRY_LOC(entry_index)                                        \
-  (ROM_FILE_TABLE_COUNT_BYTES + (ROM_FILE_TABLE_ENTRY_BYTES * (entry_index)))
+#define ROM_CHUNK_ADDR_LOC(entry_index)                                        \
+  (ROM_CHUNK_ENTRY_LOC(entry_index) + ROM_CHUNK_ENTRY_ADDR_OFFSET)
 
-#define ROM_FILE_ADDR_LOC(entry_index)                                         \
-  (ROM_FILE_ENTRY_LOC(entry_index) + ROM_FILE_ENTRY_ADDR_OFFSET)
-
-#define ROM_FILE_SIZE_LOC(entry_index)                                         \
-  (ROM_FILE_ENTRY_LOC(entry_index) + ROM_FILE_ENTRY_SIZE_OFFSET)
-
-#define ROM_FILE_NAME_LOC(entry_index)                                         \
-  (ROM_FILE_ENTRY_LOC(entry_index) + ROM_FILE_ENTRY_NAME_OFFSET)
+#define ROM_CHUNK_SIZE_LOC(entry_index)                                        \
+  (ROM_CHUNK_ENTRY_LOC(entry_index) + ROM_CHUNK_ENTRY_SIZE_OFFSET)
 
 /* big endian read / write macros */
 
@@ -100,56 +93,56 @@ int rom_validate()
 {
   unsigned short k;
 
-  unsigned short num_files;
+  unsigned short num_chunks;
 
   unsigned long  data_block_addr;
   unsigned long  data_block_size;
 
-  unsigned long  file_addr;
-  unsigned long  file_size;
-  unsigned long  file_accum;
+  unsigned long  chunk_addr;
+  unsigned long  chunk_size;
+  unsigned long  chunk_accum;
 
   /* make sure rom size is valid */
   if (G_rom_size > ROM_MAX_BYTES)
     return 1;
 
-  /* obtain file table size */
-  if (G_rom_size >= ROM_FILE_TABLE_COUNT_BYTES)
+  /* obtain chunk table size */
+  if (G_rom_size >= ROM_CHUNK_TABLE_COUNT_BYTES)
   {
-    ROM_READ_16BE(num_files, 0)
+    ROM_READ_16BE(num_chunks, 0)
   }
   else
     return 1;
 
   /* obtain data block size */
-  data_block_addr = ROM_FILE_TABLE_SIZE(num_files);
+  data_block_addr = ROM_CHUNK_TABLE_SIZE(num_chunks);
 
   if (G_rom_size >= data_block_addr)
     data_block_size = G_rom_size - data_block_addr;
   else
     return 1;
 
-  /* validate file table */
-  file_accum = 0;
+  /* validate chunk table */
+  chunk_accum = 0;
 
-  for (k = 0; k < num_files; k++)
+  for (k = 0; k < num_chunks; k++)
   {
-    ROM_READ_24BE(file_addr, ROM_FILE_ADDR_LOC(k))
-    ROM_READ_24BE(file_size, ROM_FILE_SIZE_LOC(k))
+    ROM_READ_24BE(chunk_addr, ROM_CHUNK_ADDR_LOC(k))
+    ROM_READ_24BE(chunk_size, ROM_CHUNK_SIZE_LOC(k))
 
-    if (file_accum != file_addr)
+    if (chunk_accum != chunk_addr)
       return 1;
 
-    if (file_size == 0)
+    if (chunk_size == 0)
       return 1;
 
-    if (file_addr >= data_block_size)
+    if (chunk_addr >= data_block_size)
       return 1;
 
-    file_accum += file_size;
+    chunk_accum += chunk_size;
   }
 
-  if (file_accum != data_block_size)
+  if (chunk_accum != data_block_size)
     return 1;
 
   return 0;
@@ -162,23 +155,21 @@ int rom_format()
 {
   rom_clear();
 
-  /* just define a zero-entry file table          */
+  /* just define a zero-entry chunk table         */
   /* since the rom is already cleared to zeroes,  */
   /* we just increase the rom size to cover this. */
-  G_rom_size = ROM_FILE_TABLE_COUNT_BYTES;
+  G_rom_size = ROM_CHUNK_TABLE_COUNT_BYTES;
 
   return 0;
 }
 
 /******************************************************************************/
-/* rom_create_file()                                                          */
+/* rom_create_chunk()                                                         */
 /******************************************************************************/
-int rom_create_file(unsigned long num_bytes)
+int rom_create_chunk(unsigned long num_bytes)
 {
-  unsigned short k;
-
-  unsigned short num_files;
-  unsigned short file_index;
+  unsigned short num_chunks;
+  unsigned short chunk_index;
 
   unsigned long  data_block_addr;
   unsigned long  data_block_size;
@@ -187,41 +178,36 @@ int rom_create_file(unsigned long num_bytes)
   if (num_bytes == 0)
     return 1;
 
-  /* make sure there is space for the new table entry and file */
-  if ((G_rom_size + ROM_FILE_TABLE_ENTRY_BYTES + num_bytes) >= ROM_MAX_BYTES)
+  /* make sure there is space for the new table entry and chunk */
+  if ((G_rom_size + ROM_CHUNK_TABLE_ENTRY_BYTES + num_bytes) >= ROM_MAX_BYTES)
     return 1;
 
-  /* insert space for new file table entry */
-  ROM_READ_16BE(num_files, 0)
+  /* insert space for new chunk table entry */
+  ROM_READ_16BE(num_chunks, 0)
 
-  if (num_files == ROM_MAX_FILES)
+  if (num_chunks == ROM_MAX_CHUNKS)
     return 1;
 
-  data_block_addr = ROM_FILE_TABLE_SIZE(num_files);
+  data_block_addr = ROM_CHUNK_TABLE_SIZE(num_chunks);
   data_block_size = G_rom_size - data_block_addr;
 
   if (data_block_size > 0)
   {
-    memmove(&G_rom_data[data_block_addr + ROM_FILE_TABLE_ENTRY_BYTES], 
+    memmove(&G_rom_data[data_block_addr + ROM_CHUNK_TABLE_ENTRY_BYTES], 
             &G_rom_data[data_block_addr], 
             data_block_size);
   }
 
-  G_rom_size += ROM_FILE_TABLE_ENTRY_BYTES;
+  G_rom_size += ROM_CHUNK_TABLE_ENTRY_BYTES;
 
-  file_index = num_files;
+  chunk_index = num_chunks;
 
-  num_files += 1;
-  ROM_WRITE_16BE(0, num_files)
+  num_chunks += 1;
+  ROM_WRITE_16BE(0, num_chunks)
 
-  /* fill out file table entry */
-  ROM_WRITE_24BE(ROM_FILE_ADDR_LOC(file_index), data_block_size)
-  ROM_WRITE_24BE(ROM_FILE_SIZE_LOC(file_index), num_bytes)
-
-  for (k = 0; k < ROM_FILE_ENTRY_NAME_BYTES; k++)
-  {
-    ROM_WRITE_BYTE(ROM_FILE_NAME_LOC(file_index) + k, 0)
-  }
+  /* fill out chunk table entry */
+  ROM_WRITE_24BE(ROM_CHUNK_ADDR_LOC(chunk_index), data_block_size)
+  ROM_WRITE_24BE(ROM_CHUNK_SIZE_LOC(chunk_index), num_bytes)
 
   /* update the rom size and return */
   G_rom_size += num_bytes;
@@ -230,14 +216,15 @@ int rom_create_file(unsigned long num_bytes)
 }
 
 /******************************************************************************/
-/* rom_add_file_bytes()                                                       */
+/* rom_add_chunk_bytes()                                                      */
 /******************************************************************************/
-int rom_add_file_bytes(unsigned char* data, unsigned long num_bytes)
+int rom_add_chunk_bytes(unsigned short* chunk_index_cb, 
+                        unsigned char* data, unsigned long num_bytes)
 {
-  unsigned short num_files;
+  unsigned short num_chunks;
 
   unsigned long  data_block_addr;
-  unsigned long  file_addr;
+  unsigned long  chunk_addr;
 
   /* check input variables */
   if (data == NULL)
@@ -246,34 +233,38 @@ int rom_add_file_bytes(unsigned char* data, unsigned long num_bytes)
   if (num_bytes == 0)
     return 0;
 
-  /* create new file */
-  if (rom_create_file(num_bytes))
+  /* create new chunk */
+  if (rom_create_chunk(num_bytes))
     return 1;
 
-  /* determine new file address */
-  ROM_READ_16BE(num_files, 0)
+  /* determine new chunk address */
+  ROM_READ_16BE(num_chunks, 0)
 
-  data_block_addr = ROM_FILE_TABLE_SIZE(num_files);
+  data_block_addr = ROM_CHUNK_TABLE_SIZE(num_chunks);
 
-  ROM_READ_24BE(file_addr, ROM_FILE_ADDR_LOC(num_files - 1))
+  ROM_READ_24BE(chunk_addr, ROM_CHUNK_ADDR_LOC(num_chunks - 1))
 
-  /* copy the data to the file */
-  memcpy(&G_rom_data[data_block_addr + file_addr], data, num_bytes);
+  /* copy the data to the chunk */
+  memcpy(&G_rom_data[data_block_addr + chunk_addr], data, num_bytes);
+
+  /* set chunk index callback and return */
+  *chunk_index_cb = num_chunks - 1;
 
   return 0;
 }
 
 /******************************************************************************/
-/* rom_add_file_words()                                                       */
+/* rom_add_chunk_words()                                                      */
 /******************************************************************************/
-int rom_add_file_words(unsigned short* data, unsigned long num_words)
+int rom_add_chunk_words(unsigned short* chunk_index_cb, 
+                        unsigned short* data, unsigned long num_words)
 {
   unsigned long  k;
 
-  unsigned short num_files;
+  unsigned short num_chunks;
 
   unsigned long  data_block_addr;
-  unsigned long  file_addr;
+  unsigned long  chunk_addr;
 
   /* check input variables */
   if (data == NULL)
@@ -282,22 +273,25 @@ int rom_add_file_words(unsigned short* data, unsigned long num_words)
   if (num_words == 0)
     return 0;
 
-  /* create new file */
-  if (rom_create_file(2 * num_words))
+  /* create new chunk */
+  if (rom_create_chunk(2 * num_words))
     return 1;
 
-  /* determine new file address */
-  ROM_READ_16BE(num_files, 0)
+  /* determine new chunk address */
+  ROM_READ_16BE(num_chunks, 0)
 
-  data_block_addr = ROM_FILE_TABLE_SIZE(num_files);
+  data_block_addr = ROM_CHUNK_TABLE_SIZE(num_chunks);
 
-  ROM_READ_24BE(file_addr, ROM_FILE_ADDR_LOC(num_files - 1))
+  ROM_READ_24BE(chunk_addr, ROM_CHUNK_ADDR_LOC(num_chunks - 1))
 
-  /* copy the data to the file */
+  /* copy the data to the chunk */
   for (k = 0; k < num_words; k++)
   {
-    ROM_WRITE_16BE(data_block_addr + file_addr + 2 * k, data[k])
+    ROM_WRITE_16BE(data_block_addr + chunk_addr + 2 * k, data[k])
   }
+
+  /* set chunk index callback and return */
+  *chunk_index_cb = num_chunks - 1;
 
   return 0;
 }

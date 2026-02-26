@@ -18,7 +18,7 @@ int art_clear_rom_data_vars();
 
 int art_load_gif(char* filename);
 
-int art_add_files_to_rom();
+int art_add_chunks_to_rom();
 
 #endif
 

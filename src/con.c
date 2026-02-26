@@ -261,7 +261,7 @@ int con_parse_spriteset()
       return 1;
   }
 
-  art_add_files_to_rom();
+  art_add_chunks_to_rom();
 
   /* check closing curly brace */
   if (S_con_token != CON_TOKEN_CLOSE_CURLY_BRACE)

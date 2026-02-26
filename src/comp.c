@@ -1,5 +1,5 @@
 /******************************************************************************/
-/* comp.c (compile rom folder)                                                */
+/* comp.c (compile the rom folder)                                            */
 /******************************************************************************/
 
 #include <stdio.h>
@@ -8,6 +8,8 @@
 #include <dirent.h>
 
 #include "comp.h"
+
+#include "art.h"
 
 /* character macros */
 #define COMP_CHARACTER_IS_UPPERCASE(c)                                         \
@@ -77,39 +79,16 @@ int comp_reset_parse_vars()
 /******************************************************************************/
 /* comp_parse_subfolder()                                                     */
 /******************************************************************************/
-int comp_parse_subfolder()
-{
-  return 0;
-}
-
-/******************************************************************************/
-/* comp_parse_folder()                                                        */
-/******************************************************************************/
-int comp_parse_folder()
-{
-  return 0;
-}
-
-/******************************************************************************/
-/* comp_parse_root()                                                          */
-/******************************************************************************/
-int comp_parse_root()
+int comp_parse_subfolder(unsigned short root_entry)
 {
   DIR* dp;
   struct dirent* e;
 
-  unsigned short k;
-  unsigned long  present_flags;
-  unsigned char  valid_flag;
-
   /* open the directory */
-  dp = opendir(S_comp_root_path_buf);
+  dp = opendir(S_comp_subfolder_path_buf);
 
   if (dp == NULL)
     return 1;
-
-  /* initialize present flags */
-  present_flags = 0;
 
   /* check all the files and folders in the directory */
   e = readdir(dp);
@@ -123,52 +102,150 @@ int comp_parse_root()
       continue;
     }
 
-    valid_flag = 0;
+    /* assemble file path */
+    strcpy(S_comp_file_path_buf, S_comp_subfolder_path_buf);
+    strcat(S_comp_file_path_buf, e->d_name);
 
+    printf("File Path: %s\n", S_comp_file_path_buf);
+
+    /* load the file */
+    if (root_entry == COMP_ROOT_ENTRY_SPRITES)
+      art_load_gif(S_comp_file_path_buf);
+
+    e = readdir(dp);
+  }
+
+  /* close the directory */
+  closedir(dp);
+
+  return 0;
+}
+
+/******************************************************************************/
+/* comp_parse_folder()                                                        */
+/******************************************************************************/
+int comp_parse_folder(unsigned short root_entry)
+{
+  DIR* dp;
+  struct dirent* e;
+
+  /* open the directory */
+  dp = opendir(S_comp_folder_path_buf);
+
+  if (dp == NULL)
+    return 1;
+
+  /* check all the files and folders in the directory */
+  e = readdir(dp);
+
+  while (e != NULL)
+  {
+    /* skip dot, dot-dot, and hidden files */
+    if (e->d_name[0] == '.')
+    {
+      e = readdir(dp);
+      continue;
+    }
+
+    /* reset data buffers for new subfolder */
+    if (root_entry == COMP_ROOT_ENTRY_SPRITES)
+      art_clear_rom_data_vars();
+
+    /* parse subfolder */
+    strcpy(S_comp_subfolder_path_buf, S_comp_folder_path_buf);
+    strcat(S_comp_subfolder_path_buf, e->d_name);
+    strcat(S_comp_subfolder_path_buf, "/");
+
+    printf("Subfolder Path: %s\n", S_comp_subfolder_path_buf);
+
+    comp_parse_subfolder(root_entry);
+
+    /* write subfolder files to the rom */
+    if (root_entry == COMP_ROOT_ENTRY_SPRITES)
+      art_add_chunks_to_rom();
+
+    e = readdir(dp);
+  }
+
+  /* close the directory */
+  closedir(dp);
+
+  return 0;
+}
+
+/******************************************************************************/
+/* comp_parse_root()                                                          */
+/******************************************************************************/
+int comp_parse_root()
+{
+  DIR* dp;
+  struct dirent* e;
+
+  unsigned short k;
+  unsigned char  is_present[COMP_NUM_ROOT_ENTRIES];
+
+  /* open the directory */
+  dp = opendir(S_comp_root_path_buf);
+
+  if (dp == NULL)
+    return 1;
+
+  /* initialize present flags */
+  for (k = 0; k < COMP_NUM_ROOT_ENTRIES; k++)
+    is_present[k] = 0;
+
+  /* check all the files and folders in the directory */
+  e = readdir(dp);
+
+  while (e != NULL)
+  {
+    /* skip dot, dot-dot, and hidden files */
+    if (e->d_name[0] == '.')
+    {
+      e = readdir(dp);
+      continue;
+    }
+
+    /* determine if this file is one of the necessary entries */
     for (k = 0; k < COMP_NUM_ROOT_ENTRIES; k++)
     {
       if (!strcmp(e->d_name, S_comp_root_entry_names[k]))
-      {
-        if (k == 0)
-          present_flags |= 1;
-        else
-          present_flags |= (1 << k);
-
-        valid_flag = 1;
-      }
+        is_present[k] = 1;
     }
-
-    if (valid_flag == 0)
-      goto nope;
 
     printf("File: %s\n", e->d_name);
 
     e = readdir(dp);
   }
 
-  printf("Present Flags: %ld\n", present_flags);
-
   /* make sure all necessary files and folders are present */
-  if (!(present_flags & 1))
-    goto nope;
-
-  for (k = 1; k < COMP_NUM_ROOT_ENTRIES; k++)
+  for (k = 0; k < COMP_NUM_ROOT_ENTRIES; k++)
   {
-    if (!(present_flags & (1 << k)))
+    if (is_present[k] == 0)
       goto nope;
   }
 
   /* close the directory */
   closedir(dp);
 
-  /* parse the folders! */
+  /* parse the folders! (and the startup ini) */
   for (k = 0; k < COMP_NUM_ROOT_ENTRIES; k++)
   {
-    strcpy(S_comp_folder_path_buf, S_comp_root_path_buf);
-    strcat(S_comp_folder_path_buf, S_comp_root_entry_names[k]);
-    strcat(S_comp_folder_path_buf, "/");
+    if (k == COMP_ROOT_ENTRY_STARTUP_INI)
+    {
+      strcpy(S_comp_folder_path_buf, S_comp_root_path_buf);
+      strcat(S_comp_folder_path_buf, S_comp_root_entry_names[k]);
+    }
+    else
+    {
+      strcpy(S_comp_folder_path_buf, S_comp_root_path_buf);
+      strcat(S_comp_folder_path_buf, S_comp_root_entry_names[k]);
+      strcat(S_comp_folder_path_buf, "/");
 
-    printf("Folder Path: %s\n", S_comp_folder_path_buf);
+      printf("Folder Path: %s\n", S_comp_folder_path_buf);
+
+      comp_parse_folder(k);
+    }
   }
 
   goto ok;

@@ -99,6 +99,8 @@ static unsigned short S_art_lzw_dict_size;
 static unsigned char  S_art_lzw_image_buf[ART_MAX_PIXELS_PER_FRAME];
 static unsigned long  S_art_lzw_image_size;
 
+/* the decompressed buffer is in words, because in the middle of    */
+/* decompressing it may need to hold the codes (up to 12 bits each) */
 static unsigned short S_art_decomp_image_buf[ART_MAX_PIXELS_PER_FRAME];
 static unsigned long  S_art_decomp_image_size;
 
@@ -1127,21 +1129,37 @@ ok:
 }
 
 /******************************************************************************/
-/* art_add_files_to_rom()                                                     */
+/* art_add_chunks_to_rom()                                                    */
 /******************************************************************************/
-int art_add_files_to_rom()
+int art_add_chunks_to_rom()
 {
+  unsigned short chunk_index_palette;
+  unsigned short chunk_index_elements;
+  unsigned short chunk_index_cells;
+
   /* palette */
-  if (rom_add_file_words(G_art_palette, VDP_COLORS_PER_PAL))
+  if (rom_add_chunk_words(&chunk_index_palette, 
+                          G_art_palette, VDP_COLORS_PER_PAL))
+  {
     return 1;
+  }
 
   /* nametable */
-  if (rom_add_file_words(G_art_elements, G_art_num_elements * VDP_NAME_ENTRY_SIZE))
+  if (rom_add_chunk_words(&chunk_index_elements, 
+                          G_art_elements, G_art_num_elements * VDP_NAME_ENTRY_SIZE))
+  {
     return 1;
+  }
 
   /* cells */
-  if (rom_add_file_bytes(G_art_cells, G_art_num_cells * VDP_BYTES_PER_CELL))
+  if (rom_add_chunk_bytes(&chunk_index_cells, 
+                          G_art_cells, G_art_num_cells * VDP_BYTES_PER_CELL))
+  {
     return 1;
+  }
+
+  printf( "Chunk Indices: %d %d %d\n", 
+          chunk_index_palette, chunk_index_elements, chunk_index_cells);
 
   return 0;
 }

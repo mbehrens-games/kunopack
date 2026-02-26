@@ -13,8 +13,11 @@ int rom_clear();
 int rom_validate();
 int rom_format();
 
-int rom_add_file_bytes(unsigned char* data, unsigned long num_bytes);
-int rom_add_file_words(unsigned short* data, unsigned long num_words);
+int rom_add_chunk_bytes(unsigned short* chunk_index_cb, 
+                        unsigned char* data, unsigned long num_bytes);
+
+int rom_add_chunk_words(unsigned short* chunk_index_cb, 
+                        unsigned short* data, unsigned long num_words);
 
 int rom_save(char* filename);
 

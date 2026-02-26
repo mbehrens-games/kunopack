@@ -20,8 +20,10 @@ int main(int argc, char *argv[])
   /* compile rom folder */
   comp_pack_rom("test");
 
+#if 0
   /* parse con file */
   con_load_file("test_spriteset.con");
+#endif
 
 #if 0
   /* create test sprite set */
