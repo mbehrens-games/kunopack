@@ -36,14 +36,12 @@
 /* root level entries */
 enum
 {
-  COMP_ROOT_ENTRY_SPRITES = 0, 
-  COMP_ROOT_ENTRY_STARTUP_INI, 
-  COMP_NUM_ROOT_ENTRIES 
+  COMP_FOLDER_SPRITES = 0, 
+  COMP_NUM_FOLDERS 
 };
 
-static const char* S_comp_root_entry_names[COMP_NUM_ROOT_ENTRIES] = 
-  { "Sprites", 
-    "startup.ini" 
+static const char* S_comp_folder_names[COMP_NUM_FOLDERS] = 
+  { "Sprites" 
   };
 
 /* paths */
@@ -79,7 +77,7 @@ int comp_reset_parse_vars()
 /******************************************************************************/
 /* comp_parse_subfolder()                                                     */
 /******************************************************************************/
-int comp_parse_subfolder(unsigned short root_entry)
+int comp_parse_subfolder(unsigned short folder)
 {
   DIR* dp;
   struct dirent* e;
@@ -109,7 +107,7 @@ int comp_parse_subfolder(unsigned short root_entry)
     printf("File Path: %s\n", S_comp_file_path_buf);
 
     /* load the file */
-    if (root_entry == COMP_ROOT_ENTRY_SPRITES)
+    if (folder == COMP_FOLDER_SPRITES)
       art_load_gif(S_comp_file_path_buf);
 
     e = readdir(dp);
@@ -124,7 +122,7 @@ int comp_parse_subfolder(unsigned short root_entry)
 /******************************************************************************/
 /* comp_parse_folder()                                                        */
 /******************************************************************************/
-int comp_parse_folder(unsigned short root_entry)
+int comp_parse_folder(unsigned short folder)
 {
   DIR* dp;
   struct dirent* e;
@@ -134,6 +132,10 @@ int comp_parse_folder(unsigned short root_entry)
 
   if (dp == NULL)
     return 1;
+
+  /* reset data buffers for this folder */
+  if (folder == COMP_FOLDER_SPRITES)
+    art_clear_rom_data_vars();
 
   /* check all the files and folders in the directory */
   e = readdir(dp);
@@ -147,10 +149,6 @@ int comp_parse_folder(unsigned short root_entry)
       continue;
     }
 
-    /* reset data buffers for new subfolder */
-    if (root_entry == COMP_ROOT_ENTRY_SPRITES)
-      art_clear_rom_data_vars();
-
     /* parse subfolder */
     strcpy(S_comp_subfolder_path_buf, S_comp_folder_path_buf);
     strcat(S_comp_subfolder_path_buf, e->d_name);
@@ -158,14 +156,14 @@ int comp_parse_folder(unsigned short root_entry)
 
     printf("Subfolder Path: %s\n", S_comp_subfolder_path_buf);
 
-    comp_parse_subfolder(root_entry);
-
-    /* write subfolder files to the rom */
-    if (root_entry == COMP_ROOT_ENTRY_SPRITES)
-      art_add_chunks_to_rom();
+    comp_parse_subfolder(folder);
 
     e = readdir(dp);
   }
+
+  /* write folder files to the rom */
+  if (folder == COMP_FOLDER_SPRITES)
+    art_add_chunks_to_rom();
 
   /* close the directory */
   closedir(dp);
@@ -182,7 +180,7 @@ int comp_parse_root()
   struct dirent* e;
 
   unsigned short k;
-  unsigned char  is_present[COMP_NUM_ROOT_ENTRIES];
+  unsigned char  is_present[COMP_NUM_FOLDERS];
 
   /* open the directory */
   dp = opendir(S_comp_root_path_buf);
@@ -191,7 +189,7 @@ int comp_parse_root()
     return 1;
 
   /* initialize present flags */
-  for (k = 0; k < COMP_NUM_ROOT_ENTRIES; k++)
+  for (k = 0; k < COMP_NUM_FOLDERS; k++)
     is_present[k] = 0;
 
   /* check all the files and folders in the directory */
@@ -207,9 +205,9 @@ int comp_parse_root()
     }
 
     /* determine if this file is one of the necessary entries */
-    for (k = 0; k < COMP_NUM_ROOT_ENTRIES; k++)
+    for (k = 0; k < COMP_NUM_FOLDERS; k++)
     {
-      if (!strcmp(e->d_name, S_comp_root_entry_names[k]))
+      if (!strcmp(e->d_name, S_comp_folder_names[k]))
         is_present[k] = 1;
     }
 
@@ -219,7 +217,7 @@ int comp_parse_root()
   }
 
   /* make sure all necessary files and folders are present */
-  for (k = 0; k < COMP_NUM_ROOT_ENTRIES; k++)
+  for (k = 0; k < COMP_NUM_FOLDERS; k++)
   {
     if (is_present[k] == 0)
       goto nope;
@@ -229,23 +227,15 @@ int comp_parse_root()
   closedir(dp);
 
   /* parse the folders! (and the startup ini) */
-  for (k = 0; k < COMP_NUM_ROOT_ENTRIES; k++)
+  for (k = 0; k < COMP_NUM_FOLDERS; k++)
   {
-    if (k == COMP_ROOT_ENTRY_STARTUP_INI)
-    {
-      strcpy(S_comp_folder_path_buf, S_comp_root_path_buf);
-      strcat(S_comp_folder_path_buf, S_comp_root_entry_names[k]);
-    }
-    else
-    {
-      strcpy(S_comp_folder_path_buf, S_comp_root_path_buf);
-      strcat(S_comp_folder_path_buf, S_comp_root_entry_names[k]);
-      strcat(S_comp_folder_path_buf, "/");
+    strcpy(S_comp_folder_path_buf, S_comp_root_path_buf);
+    strcat(S_comp_folder_path_buf, S_comp_folder_names[k]);
+    strcat(S_comp_folder_path_buf, "/");
 
-      printf("Folder Path: %s\n", S_comp_folder_path_buf);
+    printf("Folder Path: %s\n", S_comp_folder_path_buf);
 
-      comp_parse_folder(k);
-    }
+    comp_parse_folder(k);
   }
 
   goto ok;

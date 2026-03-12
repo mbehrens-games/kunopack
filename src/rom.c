@@ -14,8 +14,6 @@
 /*    a) chunk address (3 bytes)              */
 /*    b) chunk size (3 bytes)                 */
 
-#define ROM_MAX_CHUNKS 65535
-
 #define ROM_CHUNK_TABLE_COUNT_BYTES  2
 
 #define ROM_CHUNK_ENTRY_ADDR_OFFSET  0
@@ -185,9 +183,6 @@ int rom_create_chunk(unsigned long num_bytes)
   /* insert space for new chunk table entry */
   ROM_READ_16BE(num_chunks, 0)
 
-  if (num_chunks == ROM_MAX_CHUNKS)
-    return 1;
-
   data_block_addr = ROM_CHUNK_TABLE_SIZE(num_chunks);
   data_block_size = G_rom_size - data_block_addr;
 
@@ -218,8 +213,7 @@ int rom_create_chunk(unsigned long num_bytes)
 /******************************************************************************/
 /* rom_add_chunk_bytes()                                                      */
 /******************************************************************************/
-int rom_add_chunk_bytes(unsigned short* chunk_index_cb, 
-                        unsigned char* data, unsigned long num_bytes)
+int rom_add_chunk_bytes(unsigned char* data, unsigned long num_bytes)
 {
   unsigned short num_chunks;
 
@@ -247,17 +241,13 @@ int rom_add_chunk_bytes(unsigned short* chunk_index_cb,
   /* copy the data to the chunk */
   memcpy(&G_rom_data[data_block_addr + chunk_addr], data, num_bytes);
 
-  /* set chunk index callback and return */
-  *chunk_index_cb = num_chunks - 1;
-
   return 0;
 }
 
 /******************************************************************************/
 /* rom_add_chunk_words()                                                      */
 /******************************************************************************/
-int rom_add_chunk_words(unsigned short* chunk_index_cb, 
-                        unsigned short* data, unsigned long num_words)
+int rom_add_chunk_words(unsigned short* data, unsigned long num_words)
 {
   unsigned long  k;
 
@@ -289,9 +279,6 @@ int rom_add_chunk_words(unsigned short* chunk_index_cb,
   {
     ROM_WRITE_16BE(data_block_addr + chunk_addr + 2 * k, data[k])
   }
-
-  /* set chunk index callback and return */
-  *chunk_index_cb = num_chunks - 1;
 
   return 0;
 }

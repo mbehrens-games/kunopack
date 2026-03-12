@@ -10,33 +10,36 @@
 
 #include "rom.h"
 
-/* graphics constants (same as in vdp.c in the main code) */
-#define VDP_COLORS_PER_PAL  16
+/* nametable */
+#define VDP_ENTRY_SIZE        5
+#define VDP_MAX_ENTRIES       (1 << 12)
+#define VDP_NAMETABLE_SIZE    (VDP_ENTRY_SIZE * VDP_MAX_ENTRIES)
 
-#define VDP_CELL_W_H        8
-#define VDP_PIXELS_PER_CELL (VDP_CELL_W_H * VDP_CELL_W_H)
-#define VDP_BYTES_PER_CELL  (VDP_PIXELS_PER_CELL / 2)
+unsigned short G_art_nametable[VDP_NAMETABLE_SIZE];
+unsigned short G_art_num_entries;
 
-#define VDP_VRAM_SIZE (1 << 16) /* 64 K (2048 cells, 32 bytes each) */
+/* palettes */
+#define VDP_COLORS_PER_PAL    16
 
-#define VDP_MAX_CELLS (VDP_VRAM_SIZE / VDP_BYTES_PER_CELL) /* 2048 */
+#define VDP_ROM_MAX_PALS      (1 << 8) /* 8 KB total size */ 
+#define VDP_ROM_PALS_SIZE     (VDP_ROM_MAX_PALS * VDP_COLORS_PER_PAL)
 
-/* 4 K words (so, 8 K bytes) */
-#define VDP_NAME_ENTRY_SIZE 2
-#define VDP_NAME_TABLE_SIZE (VDP_NAME_ENTRY_SIZE * VDP_MAX_CELLS)
+unsigned short G_art_pals[VDP_ROM_PALS_SIZE];
+unsigned short G_art_num_pals;
 
-#define VDP_SYMBOL_ENTRY_SIZE 1
-#define VDP_SYMBOL_TABLE_SIZE (VDP_SYMBOL_ENTRY_SIZE * VDP_MAX_CELLS)
+/* cells */
+#define VDP_CELL_W_H          8
+#define VDP_PIXELS_PER_CELL   (VDP_CELL_W_H * VDP_CELL_W_H)
+#define VDP_BYTES_PER_CELL    (VDP_PIXELS_PER_CELL / 2)
 
-/* rom data variables */
-unsigned short G_art_palette[VDP_COLORS_PER_PAL];
-unsigned short G_art_elements[VDP_NAME_TABLE_SIZE];
-unsigned char  G_art_cells[VDP_VRAM_SIZE];
+#define VDP_ROM_MAX_CELLS     (1 << 16) /* 2 MB total size */
+#define VDP_ROM_CELLS_SIZE    (VDP_ROM_MAX_CELLS * VDP_BYTES_PER_CELL)
 
-unsigned short G_art_num_elements;
-unsigned short G_art_num_cells;
+#define VDP_CACHE_MAX_CELLS   (1 << 13) /* 256 KB total size */
+#define VDP_CACHE_CELLS_SIZE  (VDP_CACHE_MAX_CELLS * VDP_BYTES_PER_CELL)
 
-static unsigned char S_art_palette_defined;
+unsigned char  G_art_cells[VDP_ROM_CELLS_SIZE];
+unsigned long  G_art_num_cells;
 
 /* image variables */
 #define ART_ANIM_FLAG_LOOP      0x0001
@@ -52,6 +55,10 @@ static unsigned short S_art_frame_columns;
 static unsigned short S_art_num_frames;
 static unsigned short S_art_anim_ticks;
 static unsigned short S_art_anim_flags;
+
+static unsigned short S_art_pal_index;
+static unsigned long  S_art_cells_addr;
+static unsigned long  S_art_cells_size;
 
 /* gif */
 #define ART_GIF_FLAG_GCT_EXISTS   0x0001
@@ -115,19 +122,18 @@ int art_clear_rom_data_vars()
   unsigned long k;
 
   /* rom data buffers */
-  for (k = 0; k < VDP_COLORS_PER_PAL; k++)
-    G_art_palette[k] = 0;
+  for (k = 0; k < VDP_NAMETABLE_SIZE; k++)
+    G_art_nametable[k] = 0;
 
-  for (k = 0; k < VDP_NAME_TABLE_SIZE; k++)
-    G_art_elements[k] = 0;
+  for (k = 0; k < VDP_ROM_PALS_SIZE; k++)
+    G_art_pals[k] = 0;
 
-  for (k = 0; k < VDP_VRAM_SIZE; k++)
+  for (k = 0; k < VDP_ROM_CELLS_SIZE; k++)
     G_art_cells[k] = 0;
 
-  G_art_num_elements = 0;
+  G_art_num_entries = 0;
+  G_art_num_pals = 0;
   G_art_num_cells = 0;
-
-  S_art_palette_defined = 0;
 
   return 0;
 }
@@ -150,6 +156,10 @@ int art_clear_image_vars()
   S_art_num_frames = 0;
   S_art_anim_ticks = 0;
   S_art_anim_flags = 0x0000;
+
+  S_art_pal_index = 0;
+  S_art_cells_addr = 0;
+  S_art_cells_size = 0;
 
   /* image buffers */
   for (k = 0; k < ART_MAX_PIXELS_PER_FRAME; k++)
@@ -893,48 +903,73 @@ int art_check_for_ping_pong_animation()
 }
 
 /******************************************************************************/
+/* art_add_entry()                                                            */
+/******************************************************************************/
+int art_add_entry()
+{
+  unsigned short val;
+
+  if (G_art_num_entries >= VDP_MAX_ENTRIES)
+    return 1;
+
+  /* word 1: dimensions, number of frames & angles, animation info */
+  val =  ((S_art_frame_columns - 1) << 13) & 0x6000;
+  val |= ((S_art_frame_rows - 1) << 11) & 0x1800;
+  val |= ((S_art_num_frames - 1) << 8) & 0x0700;
+#if 0
+  val |= (S_art_num_angles << 6) & 0x00C0;
+#endif
+  val |= (S_art_anim_flags << 4) & 0x0030;
+  val |= (S_art_anim_ticks / 2) & 0x000F;
+
+  G_art_nametable[VDP_ENTRY_SIZE * G_art_num_entries + 0] = val;
+
+  /* word 2: number of palettes, palette number */
+#if 0
+  val = ((S_art_num_pals - 1) << 12) & 0x7000;
+#endif
+  val = S_art_pal_index & 0x00FF;
+
+  G_art_nametable[VDP_ENTRY_SIZE * G_art_num_entries + 1] = val;
+
+  /* word 3: cells array address (upper 6 bits), data size (upper 6 bits) */
+  val =  (S_art_cells_addr >> 8) & 0x3F00;
+  val |= (S_art_cells_size >> 16) & 0x003F;
+
+  G_art_nametable[VDP_ENTRY_SIZE * G_art_num_entries + 2] = val;
+
+  /* word 4: cells array address (lower 16 bits) */
+  val = S_art_cells_addr & 0xFFFF;
+
+  G_art_nametable[VDP_ENTRY_SIZE * G_art_num_entries + 3] = val;
+
+  /* word 5: data size (lower 16 bits) */
+  val = S_art_cells_size & 0xFFFF;
+
+  G_art_nametable[VDP_ENTRY_SIZE * G_art_num_entries + 4] = val;
+
+  G_art_num_entries += 1;
+
+  return 0;
+}
+
+/******************************************************************************/
 /* art_add_palette()                                                          */
 /******************************************************************************/
 int art_add_palette()
 {
   unsigned short k;
 
-  /* check if we already added a palette */
-  if (S_art_palette_defined == 1)
-    return 0;
-
-  /* add the gif colors to the palette! */
-  for (k = 0; k < VDP_COLORS_PER_PAL; k++)
-    G_art_palette[k] = S_art_gif_colors[k];
-
-  S_art_palette_defined = 1;
-
-  return 0;
-}
-
-/******************************************************************************/
-/* art_add_sprite()                                                           */
-/******************************************************************************/
-int art_add_sprite()
-{
-  unsigned short val;
-
-  if ((G_art_num_elements + 1) >= VDP_NAME_TABLE_SIZE)
+  if (G_art_num_pals >= VDP_ROM_MAX_PALS)
     return 1;
 
-  /* 1st word: dimensions, number of frames, animation frame length */
-  val = ((S_art_frame_columns - 1) << 12) & 0xF000;
-  val |= ((S_art_frame_rows - 1) << 8) & 0x0F00;
-  val |= ((S_art_num_frames - 1) << 5) & 0x00E0;
+  S_art_pal_index = G_art_num_pals;
 
-  G_art_elements[2 * G_art_num_elements + 0] = val;
+  /* add the new palette */
+  for (k = 0; k < VDP_COLORS_PER_PAL; k++)
+    G_art_pals[G_art_num_pals * VDP_COLORS_PER_PAL + k] = S_art_gif_colors[k];
 
-  /* 2nd word: index to the first cell in vram */
-  val = G_art_num_cells & 0x07FF;
-
-  G_art_elements[2 * G_art_num_elements + 1] = val;
-
-  G_art_num_elements += 1;
+  G_art_num_pals += 1;
 
   return 0;
 }
@@ -950,8 +985,8 @@ int art_add_cells()
 
   unsigned short frame_cells;
 
-  unsigned short cell_addr;
-  unsigned short cell_offset;
+  unsigned long  cell_addr;
+  unsigned long  cell_offset;
 
   unsigned short pixel_addr;
   unsigned short pixel_offset;
@@ -961,8 +996,11 @@ int art_add_cells()
   /* determine how many cells are to be created */
   frame_cells = S_art_frame_rows * S_art_frame_columns;
 
-  if (G_art_num_cells + (S_art_num_frames * frame_cells) > VDP_MAX_CELLS)
+  if (G_art_num_cells + (S_art_num_frames * frame_cells) > VDP_ROM_MAX_CELLS)
     return 1;
+
+  S_art_cells_addr = G_art_num_cells;
+  S_art_cells_size = S_art_num_frames * frame_cells;
 
   /* create cells */
   for (k = 0; k < S_art_num_frames; k++)
@@ -1114,9 +1152,14 @@ int art_load_gif(char* filename)
   S_art_anim_flags |= ART_ANIM_FLAG_LOOP;
 
   /* add everything to the rom data buffers */
-  art_add_palette();
-  art_add_sprite();
-  art_add_cells();
+  if (art_add_palette())
+    return 1;
+
+  if (art_add_cells())
+    return 1;
+
+  if (art_add_entry())
+    return 1;
 
   goto ok;
 
@@ -1133,33 +1176,14 @@ ok:
 /******************************************************************************/
 int art_add_chunks_to_rom()
 {
-  unsigned short chunk_index_palette;
-  unsigned short chunk_index_elements;
-  unsigned short chunk_index_cells;
-
-  /* palette */
-  if (rom_add_chunk_words(&chunk_index_palette, 
-                          G_art_palette, VDP_COLORS_PER_PAL))
-  {
+  if (rom_add_chunk_words(G_art_nametable, G_art_num_entries * VDP_ENTRY_SIZE))
     return 1;
-  }
 
-  /* nametable */
-  if (rom_add_chunk_words(&chunk_index_elements, 
-                          G_art_elements, G_art_num_elements * VDP_NAME_ENTRY_SIZE))
-  {
+  if (rom_add_chunk_words(G_art_pals, G_art_num_pals * VDP_COLORS_PER_PAL))
     return 1;
-  }
 
-  /* cells */
-  if (rom_add_chunk_bytes(&chunk_index_cells, 
-                          G_art_cells, G_art_num_cells * VDP_BYTES_PER_CELL))
-  {
+  if (rom_add_chunk_bytes(G_art_cells, G_art_num_cells * VDP_BYTES_PER_CELL))
     return 1;
-  }
-
-  printf( "Chunk Indices: %d %d %d\n", 
-          chunk_index_palette, chunk_index_elements, chunk_index_cells);
 
   return 0;
 }
